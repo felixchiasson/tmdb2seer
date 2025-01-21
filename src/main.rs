@@ -5,7 +5,7 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use http::StatusCode;
+use http::{HeaderMap, Response, StatusCode};
 use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};
 use std::{error::Error, sync::Arc};
@@ -18,6 +18,7 @@ mod config {
     pub mod settings;
 }
 mod security {
+    pub mod csrf;
     pub mod deserialize;
 }
 use crate::api::middleware::RateLimitServiceLayer;
@@ -67,6 +68,7 @@ struct Release {
 #[template(path = "../templates/index.html")] // Note the changed path
 struct IndexTemplate {
     releases: Vec<Release>,
+    csrf_token: String,
 }
 
 async fn request_media(
@@ -106,14 +108,32 @@ async fn request_media(
 }
 
 async fn add_to_jellyseerr(
+    headers: HeaderMap,
     State(config): State<Arc<AppConfig>>,
     Path((media_type, id)): Path<(String, i32)>,
 ) -> impl IntoResponse {
+    if let Some(token) = headers.get("X-CSRF-Token") {
+        if token.is_empty() {
+            return Response::builder()
+                .status(StatusCode::FORBIDDEN)
+                .body(axum::body::Body::from("Empty CSRF token"))
+                .unwrap();
+        }
+    } else {
+        return Response::builder()
+            .status(StatusCode::FORBIDDEN)
+            .body(axum::body::Body::from("Missing CSRF token"))
+            .unwrap();
+    }
+
     match request_media(&config, id, &media_type).await {
-        Ok(_) => StatusCode::OK,
+        Ok(_) => StatusCode::OK.into_response(),
         Err(e) => {
             eprintln!("Error requesting media: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
+            Response::builder()
+                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                .body(axum::body::Body::from("Internal Server Error"))
+                .unwrap()
         }
     }
 }
@@ -135,15 +155,7 @@ async fn fetch_latest_releases(api_key: &str) -> Result<Vec<Release>, Box<dyn Er
 
     let status = response.status();
     println!("Response status: {}", status);
-
     let text = response.text().await?;
-    println!("Raw API Response: {}", text);
-
-    // Try to parse as a generic JSON value first
-    let json: serde_json::Value = serde_json::from_str(&text)?;
-    println!("Parsed JSON structure: {:#?}", json);
-
-    // Now try to parse into our structure
     let response: TMDBResponse = serde_json::from_str(&text)?;
 
     Ok(response
@@ -184,7 +196,10 @@ async fn fetch_latest_releases(api_key: &str) -> Result<Vec<Release>, Box<dyn Er
 async fn index(State(config): State<Arc<AppConfig>>) -> Html<String> {
     match fetch_latest_releases(&config.tmdb_api_key).await {
         Ok(releases) => {
-            let template = IndexTemplate { releases };
+            let template = IndexTemplate {
+                releases,
+                csrf_token: security::csrf::generate_csrf_token(),
+            };
             match template.render() {
                 Ok(html) => Html(html),
                 Err(e) => Html(format!("Template rendering error: {}", e)),

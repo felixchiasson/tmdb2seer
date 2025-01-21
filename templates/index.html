@@ -1,6 +1,7 @@
 <!doctype html>
 <html>
     <head>
+        <meta name="csrf-token" content="{{ csrf_token }}">
         <title>Latest Releases</title>
         <style>
             table {
@@ -18,7 +19,7 @@
                 cursor: pointer;
             }
             .poster-img {
-                width: 100px; /* Adjust size as needed */
+                width: 100px;
                 height: auto;
                 border-radius: 4px;
                 box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
@@ -58,26 +59,39 @@
     <body>
         <script>
             async function requestMedia(mediaType, id) {
+                const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
                 try {
                     const response = await fetch(
                         `/api/request/${mediaType}/${id}`,
                         {
                             method: "POST",
-                        },
+                            headers: {
+                                'X-CSRF-Token': csrfToken,
+                                'Content-Type': 'application/json'
+                            }
+                        }
                     );
+
+                    console.log("Response status:", response.status);
 
                     if (response.ok) {
                         alert("Request submitted to Jellyseerr successfully!");
                     } else {
-                        throw new Error(
-                            `Failed to submit request: ${response.status}`,
-                        );
+                        const text = await response.text();
+                        console.error("Error details:", {
+                            status: response.status,
+                            statusText: response.statusText,
+                            responseText: text
+                        });
+                        throw new Error(`Failed to submit request: ${response.status}`);
                     }
                 } catch (error) {
+                    console.error('Error submitting request:', error);
                     alert(`Error: ${error.message}`);
                 }
             }
-        </script>
+            </script>
         <h1>Latest Releases</h1>
         <div id=""releases-content">
         <table>
