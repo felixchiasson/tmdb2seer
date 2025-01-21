@@ -1,0 +1,26 @@
+[package]
+name = "tvdb_ratings"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+askama = "0.12.1"
+axum = "0.8.1"
+chrono = { version = "0.4.39", features = ["serde"] }
+cors = "0.1.0"
+reqwest = { version = "0.12.12", features = ["json"] }
+serde = { version = "1.0.217", features = ["derive"] }
+serde_json = "1.0.137"
+tokio = { version = "1.43.0", features = ["full"] }
+hyper = { version = "0.14", features = ["full"] }
+http = "1.2.0"
+tower = { version = "0.4", features = ["util"] }
+tower-http = "0.6.2"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+secrecy = "0.8"
+thiserror = "1.0"
+
+# Add this section
+[package.metadata.askama]
+template_dir = "templates"

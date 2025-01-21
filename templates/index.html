@@ -1,0 +1,139 @@
+<!doctype html>
+<html>
+    <head>
+        <title>Latest Releases</title>
+        <style>
+            table {
+                width: 100%;
+                border-collapse: collapse;
+            }
+            th,
+            td {
+                padding: 8px;
+                text-align: left;
+                border-bottom: 1px solid #ddd;
+            }
+            button {
+                padding: 5px 10px;
+                cursor: pointer;
+            }
+            .poster-img {
+                width: 100px; /* Adjust size as needed */
+                height: auto;
+                border-radius: 4px;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+                transition: transform: 0.2s;
+            }
+            .poster-img:hover {
+                transform: scale(1.1);
+            }
+            @media (max-width: 768px) {
+                .poster-img {
+                    width: 50px;
+                }
+            }
+            .release-row {
+                vertical-align: middle;
+            }
+            .poster-link {
+                        display: inline-block;
+                        position: relative;
+                    }
+                    .poster-link:hover::after {
+                        content: 'View on TMDB';
+                        position: absolute;
+                        bottom: 0;
+                        left: 0;
+                        right: 0;
+                        background: rgba(0,0,0,0.7);
+                        color: white;
+                        padding: 4px;
+                        text-align: center;
+                        font-size: 12px;
+                        border-bottom-left-radius: 4px;
+                        border-bottom-right-radius: 4px;
+                    }
+        </style>
+    </head>
+    <body>
+        <script>
+            async function requestMedia(mediaType, id) {
+                try {
+                    const response = await fetch(
+                        `/api/request/${mediaType}/${id}`,
+                        {
+                            method: "POST",
+                        },
+                    );
+
+                    if (response.ok) {
+                        alert("Request submitted to Jellyseerr successfully!");
+                    } else {
+                        throw new Error(
+                            `Failed to submit request: ${response.status}`,
+                        );
+                    }
+                } catch (error) {
+                    alert(`Error: ${error.message}`);
+                }
+            }
+        </script>
+        <h1>Latest Releases</h1>
+        <table>
+            <thead>
+                <tr>
+                    <th>Poster</th>
+                    <th>Title</th>
+                    <th>Release Date</th>
+                    <th>Average Rating (n)</th>
+                    <th>Type</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for release in releases %}
+                <tr class="release-row">
+                    <td>
+                        <a
+                            href="{{ release.tmdb_url }}"
+                            target="_blank"
+                            class="poster-link"
+                        >
+                            <img
+                                src="{{ release.poster_url }}"
+                                alt="{{ release.title }}"
+                                class="poster-img"
+                            />
+                        </a>
+                    </td>
+                    <td>{{ release.title }}</td>
+                    <td>{{ release.release_date }}</td>
+                    <td>
+                        {{ release.vote_average }} ({{ release.vote_count }})
+                    </td>
+                    <td>{{ release.media_type }}</td>
+                    <td>
+                        <button
+                            onclick="requestMedia('{{ release.media_type }}', {{ release.id }})"
+                        >
+                            Request on Jellyseerr
+                        </button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <script>
+            async function addToSonarr(id) {
+                await fetch(`/api/sonarr/${id}`, { method: "POST" });
+                alert("Added to Sonarr");
+            }
+
+            async function addToRadarr(id) {
+                await fetch(`/api/radarr/${id}`, { method: "POST" });
+                alert("Added to Radarr");
+            }
+        </script>
+    </body>
+</html>
