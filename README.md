@@ -4,8 +4,8 @@ I was asked by a user of my media stack for the ability to view new releases wit
 ## How to use
 Currently, the only way to run this is to clone the repository and set the following env variables:
 - `TMDB_API_KEY` - Your TMDB API key
-- `JELLYSEER_URL` - The URL of your jellyseer instance
-- `JELLYSEEER_API_KEY` - The API key of your jellyseer instance
+- `JELLYSEERR_URL` - The URL of your jellyseer instance
+- `JELLYSEERR_API_KEY` - The API key of your jellyseer instance
 
 Then you can run the binary with `cargo run --release`.
 
