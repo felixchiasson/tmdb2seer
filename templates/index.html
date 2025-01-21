@@ -78,7 +78,13 @@
                 }
             }
         </script>
+        <div class="refresh-container" style="margin: 20px 0">
+            <button id="refreshButton" class="btn btn-primary">
+                <span class="refresh-icon">🔄</span> Refresh Releases
+            </button>
+        </div>
         <h1>Latest Releases</h1>
+        <div id=""releases-content">
         <table>
             <thead>
                 <tr>
@@ -123,17 +129,90 @@
                 {% endfor %}
             </tbody>
         </table>
-
+        </div>
         <script>
-            async function addToSonarr(id) {
-                await fetch(`/api/sonarr/${id}`, { method: "POST" });
-                alert("Added to Sonarr");
+            document
+                .getElementById("refreshButton")
+                .addEventListener("click", async function () {
+                    const button = this;
+                    button.disabled = true;
+                    button.innerHTML =
+                        '<span class="refresh-icon spinning">🔄</span> Refreshing...';
+
+                    try {
+                        const response = await fetch("/api/refresh");
+                        if (!response.ok) {
+                            throw new Error(
+                                `HTTP error! status: ${response.status}`,
+                            );
+                        }
+                        const html = await response.text();
+
+
+                        const container = document.getElementById('releases-content');
+                        if (container) {
+                            // Create a temporary element to parse the HTML
+                            const temp = document.createElement("div");
+                            temp.innerHTML = html;
+
+                            // Find the new table/container in the response
+                            const newContainer = temp.querySelector('#releases-content');
+
+                            if (newContainer) {
+                                container.innerHTML = newContainer.innerHTML;
+                            }
+                        }
+                    } catch (error) {
+                        console.error("Error refreshing releases:", error);
+                        alert("Failed to refresh releases. Please try again.");
+                    } finally {
+                        button.disabled = false;
+                        button.innerHTML =
+                            '<span class="refresh-icon">🔄</span> Refresh Releases';
+                    }
+                });
+        </script>
+
+        <style>
+            .refresh-icon {
+                display: inline-block;
             }
 
-            async function addToRadarr(id) {
-                await fetch(`/api/radarr/${id}`, { method: "POST" });
-                alert("Added to Radarr");
+            .refresh-icon.spinning {
+                animation: spin 1s linear infinite;
             }
-        </script>
+
+            @keyframes spin {
+                from {
+                    transform: rotate(0deg);
+                }
+                to {
+                    transform: rotate(360deg);
+                }
+            }
+
+            .btn-primary {
+                background-color: #007bff;
+                color: white;
+                padding: 10px 20px;
+                border: none;
+                border-radius: 5px;
+                cursor: pointer;
+                display: inline-flex;
+                align-items: center;
+                gap: 8px;
+            }
+
+            .btn-primary:disabled {
+                background-color: #6c757d;
+                cursor: not-allowed;
+            }
+
+            .refresh-container {
+                display: flex;
+                justify-content: flex-end;
+                padding: 0 20px;
+            }
+        </style>
     </body>
 </html>
