@@ -97,11 +97,6 @@ async fn request_media(
     Ok(())
 }
 
-async fn test_rate_limit() -> impl IntoResponse {
-    tokio::time::sleep(Duration::from_millis(50)).await; // Add a small delay to make rate limiting more noticeable
-    "OK".into_response()
-}
-
 async fn add_to_jellyseerr(
     State(config): State<Arc<AppConfig>>,
     Path((media_type, id)): Path<(String, i32)>,
@@ -178,27 +173,6 @@ async fn fetch_latest_releases(api_key: &str) -> Result<Vec<Release>, Box<dyn Er
         .collect())
 }
 
-async fn refresh_releases(State(config): State<Arc<AppConfig>>) -> impl IntoResponse {
-    match fetch_latest_releases(&config.tmdb_api_key).await {
-        Ok(releases) => {
-            let template = IndexTemplate { releases };
-            match template.render() {
-                Ok(html) => (StatusCode::OK, Html(html)).into_response(),
-                Err(e) => (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Template rendering error: {}", e),
-                )
-                    .into_response(),
-            }
-        }
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Failed to fetch releases: {}", e),
-        )
-            .into_response(),
-    }
-}
-
 async fn index(State(config): State<Arc<AppConfig>>) -> Html<String> {
     match fetch_latest_releases(&config.tmdb_api_key).await {
         Ok(releases) => {
@@ -224,8 +198,6 @@ async fn main() {
     let app = Router::new()
         .route("/", get(index))
         .route("/api/request/{media_type}/{id}", post(add_to_jellyseerr))
-        .route("/test-rate-limit", get(test_rate_limit))
-        .route("/refresh", get(refresh_releases))
         .layer(RateLimitServiceLayer::new(10, 20))
         .with_state(config);
 
