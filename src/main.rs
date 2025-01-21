@@ -13,7 +13,9 @@ mod api {
     pub mod middleware;
     mod rate_limiter;
 }
+mod config;
 use crate::api::middleware::RateLimitServiceLayer;
+use config::Settings;
 
 // Configuration struct
 #[derive(Clone)]
@@ -188,21 +190,41 @@ async fn index(State(config): State<Arc<AppConfig>>) -> Html<String> {
 
 #[tokio::main]
 async fn main() {
+    let settings = Settings::new()
+        .expect("Failed to load configuration")
+        .validate()
+        .expect("Invalid configuration");
+
     let config = Arc::new(AppConfig {
-        tmdb_api_key: std::env::var("TMDB_API_KEY").expect("TMDB_API_KEY not set"),
-        jellyseerr_api_key: std::env::var("JELLYSEERR_API_KEY")
-            .expect("JELLYSEERR_API_KEY not set"),
-        jellyseerr_url: std::env::var("JELLYSEERR_URL").expect("JELLYSEERR_URL not set"),
+        tmdb_api_key: settings.tmdb.api_key.clone(),
+        jellyseerr_api_key: settings.jellyseerr.api_key.clone(),
+        jellyseerr_url: settings.jellyseerr.url.clone(),
     });
 
     let app = Router::new()
         .route("/", get(index))
         .route("/api/request/{media_type}/{id}", post(add_to_jellyseerr))
-        .layer(RateLimitServiceLayer::new(10, 20))
+        .layer(RateLimitServiceLayer::new(
+            settings.rate_limit.requests_per_second,
+            settings.rate_limit.burst_size,
+        ))
         .with_state(config);
 
-    let addr = std::net::SocketAddr::from(([0, 0, 0, 0], 3000));
-    println!("Server running on http://localhost:3000");
+    let addr = std::net::SocketAddr::from((
+        settings.server.host.parse::<std::net::IpAddr>().unwrap(),
+        settings.server.port,
+    ));
+
+    println!(
+        "Server running on http://{}:{} in {} mode",
+        settings.server.host,
+        settings.server.port,
+        if settings.is_development() {
+            "development"
+        } else {
+            "production"
+        }
+    );
 
     axum::serve(
         tokio::net::TcpListener::bind(addr).await.unwrap(),
