@@ -1,15 +1,20 @@
 use config::{Config, ConfigError, Environment, File};
+use secrecy::{ExposeSecret, Secret};
 use serde::Deserialize;
 use std::env;
 
+use crate::security::deserialize::deserialize_secret_string;
+
 #[derive(Debug, Deserialize)]
 pub struct TMDBConfig {
-    pub api_key: String,
+    #[serde(deserialize_with = "deserialize_secret_string")]
+    pub api_key: Secret<String>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct JellyseerrConfig {
-    pub api_key: String,
+    #[serde(deserialize_with = "deserialize_secret_string")]
+    pub api_key: Secret<String>,
     pub url: String,
 }
 
@@ -47,10 +52,10 @@ impl Settings {
     }
 
     pub fn validate(self) -> Result<Self, String> {
-        if self.tmdb.api_key.is_empty() {
+        if self.tmdb.api_key.expose_secret().is_empty() {
             return Err("TMDB API key is required".into());
         }
-        if self.jellyseerr.api_key.is_empty() {
+        if self.jellyseerr.api_key.expose_secret().is_empty() {
             return Err("Jellyseerr API key is required".into());
         }
         Ok(self)

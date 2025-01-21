@@ -6,6 +6,7 @@ use axum::{
     Router,
 };
 use http::StatusCode;
+use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};
 use std::{error::Error, sync::Arc};
 
@@ -13,9 +14,14 @@ mod api {
     pub mod middleware;
     mod rate_limiter;
 }
-mod config;
+mod config {
+    pub mod settings;
+}
+mod security {
+    pub mod deserialize;
+}
 use crate::api::middleware::RateLimitServiceLayer;
-use config::Settings;
+use config::settings::Settings;
 
 // Configuration struct
 #[derive(Clone)]
@@ -196,8 +202,8 @@ async fn main() {
         .expect("Invalid configuration");
 
     let config = Arc::new(AppConfig {
-        tmdb_api_key: settings.tmdb.api_key.clone(),
-        jellyseerr_api_key: settings.jellyseerr.api_key.clone(),
+        tmdb_api_key: settings.tmdb.api_key.expose_secret().to_string(),
+        jellyseerr_api_key: settings.jellyseerr.api_key.expose_secret().to_string(),
         jellyseerr_url: settings.jellyseerr.url.clone(),
     });
 
