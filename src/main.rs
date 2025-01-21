@@ -9,6 +9,12 @@ use http::StatusCode;
 use serde::{Deserialize, Serialize};
 use std::{error::Error, sync::Arc};
 
+mod api {
+    pub mod middleware;
+    mod rate_limiter;
+}
+use crate::api::middleware::RateLimitServiceLayer;
+
 // Configuration struct
 #[derive(Clone)]
 struct AppConfig {
@@ -192,6 +198,7 @@ async fn main() {
     let app = Router::new()
         .route("/", get(index))
         .route("/api/request/{media_type}/{id}", post(add_to_jellyseerr))
+        .layer(RateLimitServiceLayer::new(10, 20))
         .with_state(config);
 
     let addr = std::net::SocketAddr::from(([0, 0, 0, 0], 3000));

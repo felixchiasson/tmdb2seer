@@ -79,6 +79,7 @@
             }
         </script>
         <h1>Latest Releases</h1>
+        <div id=""releases-content">
         <table>
             <thead>
                 <tr>
@@ -123,17 +124,6 @@
                 {% endfor %}
             </tbody>
         </table>
-
-        <script>
-            async function addToSonarr(id) {
-                await fetch(`/api/sonarr/${id}`, { method: "POST" });
-                alert("Added to Sonarr");
-            }
-
-            async function addToRadarr(id) {
-                await fetch(`/api/radarr/${id}`, { method: "POST" });
-                alert("Added to Radarr");
-            }
-        </script>
+        </div>
     </body>
 </html>
