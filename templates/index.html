@@ -54,6 +54,36 @@
                         border-bottom-left-radius: 4px;
                         border-bottom-right-radius: 4px;
                     }
+                    .refresh-container {
+                        display: flex;
+                        align-items: center;
+                        gap: 1rem;
+                        margin: 1rem 0;
+                    }
+
+                    #refreshButton {
+                        padding: 0.5rem 1rem;
+                        background-color: #4CAF50;
+                        color: white;
+                        border: none;
+                        border-radius: 4px;
+                        cursor: pointer;
+                        transition: background-color 0.3s;
+                    }
+
+                    #refreshButton:hover {
+                        background-color: #45a049;
+                    }
+
+                    #refreshButton:disabled {
+                        background-color: #cccccc;
+                        cursor: not-allowed;
+                    }
+
+                    #lastUpdate {
+                        color: #666;
+                        font-size: 0.9rem;
+                    }
         </style>
     </head>
     <body>
@@ -92,9 +122,39 @@
                 }
             }
             </script>
+            <script>
+            async function refreshData() {
+                const button = document.getElementById('refreshButton');
+                button.disabled = true;
+                button.textContent = 'Refreshing...';
+
+                try {
+                    const response = await fetch('/api/refresh', {
+                        method: 'POST',
+                        headers: {
+                            'X-CSRF-Token': '{{ csrf_token }}'
+                        }
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+
+                    // Reload the page to show new data
+                    window.location.reload();
+                } catch (error) {
+                    console.error('Refresh failed:', error);
+                    alert('Failed to refresh data. Please try again.');
+                } finally {
+                    button.disabled = false;
+                    button.textContent = 'Refresh Data';
+                }
+            }
+            </script>
         <h1>Latest Releases</h1>
-        <div class="last-update">
-            Last updated: {{ last_update.format("%Y-%m-%d %H:%M:%S UTC") }}
+        <div class="refresh-container">
+            <button id="refreshButton" onclick="refreshData()">Refresh Data</button>
+            <span id="lastUpdate">Last updated: {{ last_update.format("%Y-%m-%d %H:%M:%S UTC") }}</span>
         </div>
         <div id=""releases-content">
         <table>

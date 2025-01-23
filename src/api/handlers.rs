@@ -5,13 +5,12 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use http::{HeaderMap, Response, StatusCode};
-use std::sync::Arc;
 use tracing::{debug, error, info};
 
 use super::tmdb::Release;
 use super::{jellyseerr, tmdb};
 use crate::security;
-use crate::{AppConfig, AppState};
+use crate::AppState;
 
 #[derive(Template)]
 #[template(path = "../templates/index.html")]
@@ -75,6 +74,42 @@ pub async fn add_to_jellyseerr(
                 .status(StatusCode::INTERNAL_SERVER_ERROR)
                 .body(axum::body::Body::from("Internal Server Error"))
                 .unwrap()
+        }
+    }
+}
+
+pub async fn refresh(headers: HeaderMap, State(state): State<AppState>) -> impl IntoResponse {
+    if let Some(token) = headers.get("X-CSRF-Token") {
+        if token.is_empty() {
+            error!("Empty CSRF token received");
+            return Response::builder()
+                .status(StatusCode::FORBIDDEN)
+                .body(axum::body::Body::from("Empty CSRF token"))
+                .unwrap();
+        }
+    } else {
+        error!("Missing CSRF token");
+        return Response::builder()
+            .status(StatusCode::FORBIDDEN)
+            .body(axum::body::Body::from("Missing CSRF token"))
+            .unwrap();
+    }
+
+    info!("Manual refresh triggered");
+    match tmdb::fetch_latest_releases(&state.config.tmdb_api_key).await {
+        Ok(new_releases) => {
+            let mut releases = state.releases.write().await;
+            *releases = new_releases;
+
+            let mut last_update = state.last_update.write().await;
+            *last_update = Utc::now();
+
+            info!("Manual refresh successful");
+            StatusCode::OK.into_response()
+        }
+        Err(e) => {
+            error!("Failed to manually refresh releases: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
         }
     }
 }

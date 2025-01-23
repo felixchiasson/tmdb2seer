@@ -16,12 +16,9 @@ pub mod security {
 use crate::api::tmdb::Release;
 use crate::config::settings::Settings;
 use chrono::{DateTime, Utc};
-use secrecy::{ExposeSecret, Secret};
+use secrecy::Secret;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-
-extern crate askama;
-use askama::Template;
 
 #[derive(Clone)]
 pub struct AppConfig {
@@ -95,12 +92,16 @@ pub fn init_router(config: AppState) -> axum::Router {
         Router,
     };
 
+    let api_router = Router::new()
+        .route("/refresh", post(handlers::refresh))
+        .route(
+            "/request/{media_type}/{id}",
+            post(handlers::add_to_jellyseerr),
+        );
+
     Router::new()
         .route("/", get(handlers::index))
-        .route(
-            "/api/request/{media_type}/{id}",
-            post(handlers::add_to_jellyseerr),
-        )
+        .nest("/api", api_router)
         .layer(RateLimitServiceLayer::new(
             config.config.rate_limit.requests_per_second,
             config.config.rate_limit.burst_size,
