@@ -10,8 +10,7 @@
         {% block styles %}{% endblock %}
 
         <!-- Defer JavaScript loading -->
-        <script src="/static/js/main.js" defer></script>
-        <script src="/static/js/api.js"></script>
+        <script type="module" src="/static/js/app.js" defer></script>
         {% block scripts %}{% endblock %}
     </head>
     <body>

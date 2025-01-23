@@ -113,3 +113,22 @@ pub fn init_router(state: AppState) -> axum::Router {
         .nest_service("/static", static_service)
         .with_state(state)
 }
+
+pub fn init_static_files() -> axum::Router {
+    use axum::Router;
+    let static_dir = if cfg!(debug_assertions) {
+        "static"
+    } else {
+        "dist/static"
+    };
+
+    Router::new().nest_service("/static", ServeDir::new(static_dir))
+}
+
+pub fn get_template_path() -> String {
+    if cfg!(debug_assertions) {
+        "templates".to_string()
+    } else {
+        "dist/templates".to_string()
+    }
+}

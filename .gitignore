@@ -1,3 +1,5 @@
 /target
 /config/development.toml
+/config/production.toml
 .DS_Store
+/dist

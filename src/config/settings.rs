@@ -1,7 +1,8 @@
 use config::{Config, ConfigError, Environment, File};
 use secrecy::{ExposeSecret, Secret};
 use serde::Deserialize;
-use std::env;
+use std::{env, path::Path};
+use tracing::warn;
 
 use crate::security::deserialize::deserialize_secret_string;
 
@@ -41,15 +42,18 @@ pub struct Settings {
 
 impl Settings {
     pub fn new() -> Result<Self, ConfigError> {
-        let run_mode = env::var("RUN_MODE").unwrap_or_else(|_| "development".into());
+        let run_mode = env::var("RUN_MODE").unwrap_or_else(|_| {
+            warn!("No RUN_MODE set, defaulting to development");
+            "development".into()
+        });
 
-        let s = Config::builder()
+        let final_config = Config::builder()
             .add_source(File::with_name("config/default"))
-            .add_source(File::with_name(&format!("config/{}", run_mode)).required(false))
+            .add_source(File::with_name(&format!("config/{}", run_mode)))
             .add_source(Environment::with_prefix("APP").separator("__"))
             .build()?;
 
-        s.try_deserialize()
+        final_config.try_deserialize()
     }
 
     pub fn validate(self) -> Result<Self, String> {
