@@ -7,6 +7,7 @@ You can now use a config file when running in `config/default.toml`
 ```toml
 [tmdb]
 api_key = "your-default-key-here"
+refresh_interval = 300 # seconds for the table to automatically refresh
 
 [jellyseerr]
 api_key = "your-default-key-here"
