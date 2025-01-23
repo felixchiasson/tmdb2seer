@@ -1,9 +1,10 @@
+use super::jellyseerr;
+use crate::{api::tmdb, AppConfig};
 use secrecy::{ExposeSecret, Secret};
 use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::fmt;
 use tracing::{debug, error};
-
 #[derive(Debug, Deserialize)]
 pub struct TMDBResult {
     pub id: i32,
@@ -87,7 +88,6 @@ pub async fn fetch_latest_releases(api_key: &Secret<String>) -> Result<Vec<Relea
     Ok(response
         .results
         .into_iter()
-        .take(10)
         .map(|item| {
             let poster_url = item
                 .poster_path

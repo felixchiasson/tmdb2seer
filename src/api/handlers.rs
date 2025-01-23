@@ -70,6 +70,10 @@ pub async fn add_to_jellyseerr(
                 "Successfully added media {}/{} to Jellyseerr",
                 media_type, id
             );
+
+            let mut releases = state.releases.write().await;
+            releases.retain(|release| !(release.id == id && release.media_type == media_type));
+
             Json(json!({
                 "success": true,
                 "message": "Media requested successfully"
@@ -107,23 +111,71 @@ pub async fn refresh(headers: HeaderMap, State(state): State<AppState>) -> impl 
     info!("Manual refresh triggered");
     match tmdb::fetch_latest_releases(&state.config.tmdb_api_key).await {
         Ok(new_releases) => {
-            let mut releases = state.releases.write().await;
-            *releases = new_releases.clone();
+            match jellyseerr::filter_requested_media(&state.config, new_releases).await {
+                Ok(filtered_releases) => {
+                    let mut releases = state.releases.write().await;
+                    *releases = filtered_releases.clone();
+                    let mut last_update = state.last_update.write().await;
+                    *last_update = Utc::now();
 
-            let mut last_update = state.last_update.write().await;
-            *last_update = Utc::now();
-
-            info!("Manual refresh successful");
-            Json(json!({
-                "success": true,
-                "releases": new_releases,
-                "lastUpdate": Utc::now().to_rfc3339(),
-            }))
-            .into_response()
+                    info!("Manual refresh successful");
+                    Json(json!({
+                        "success": true,
+                        "releases": filtered_releases,
+                        "lastUpdate": Utc::now().to_rfc3339(),
+                    }))
+                    .into_response()
+                }
+                Err(e) => {
+                    error!("Failed to filter requested media: {}", e);
+                    Json(json!({
+                        "success": false,
+                        "error": e.to_string()
+                    }))
+                    .into_response()
+                }
+            }
         }
         Err(e) => {
             error!("Failed to manually refresh releases: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+            Json(json!({
+                "success": false,
+                "error": e.to_string()
+            }))
+            .into_response()
         }
     }
+}
+
+pub async fn hide_media(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Path((media_type, id)): Path<(String, i32)>,
+) -> impl IntoResponse {
+    if let Some(token) = headers.get("X-CSRF-Token") {
+        if token.is_empty() {
+            error!("Empty CSRF token received");
+            return Response::builder()
+                .status(StatusCode::FORBIDDEN)
+                .body(axum::body::Body::from("Empty CSRF token"))
+                .unwrap();
+        }
+    } else {
+        error!("Missing CSRF token");
+        return Response::builder()
+            .status(StatusCode::FORBIDDEN)
+            .body(axum::body::Body::from("Missing CSRF token"))
+            .unwrap();
+    }
+
+    let mut releases = state.releases.write().await;
+    releases.retain(|release| !(release.id == id && release.media_type == media_type));
+
+    info!("Hidden media {}/{} from view", media_type, id);
+
+    Json(json!({
+        "success": true,
+        "message": "Media hidden successfully"
+    }))
+    .into_response()
 }

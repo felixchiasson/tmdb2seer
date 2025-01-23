@@ -101,6 +101,7 @@ pub fn init_router(state: AppState) -> axum::Router {
             "/request/{media_type}/{id}",
             post(handlers::add_to_jellyseerr),
         )
+        .route("/hide/{media_type}/{id}", post(handlers::hide_media))
         .layer(RateLimitServiceLayer::new(
             state.config.rate_limit.requests_per_second,
             state.config.rate_limit.burst_size,

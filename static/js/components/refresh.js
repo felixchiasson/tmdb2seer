@@ -1,45 +1,23 @@
 document.addEventListener("DOMContentLoaded", () => {
-  // Setup initial cards
   const releasesContainer = document.getElementById("releases-container");
   if (releasesContainer) {
-    const cards = Array.from(releasesContainer.children);
-    const releases = cards.map((card) => ({
-      id: card.dataset.id,
-      title: card.querySelector("h3").textContent,
-      poster_url: card.querySelector("img").src,
-      release_date: card
-        .querySelector(".release-info p:nth-child(2)")
-        .textContent.replace("Release Date: ", ""),
-      media_type: card
-        .querySelector(".release-info p:nth-child(3)")
-        .textContent.replace("Type: ", ""),
-      vote_average: parseFloat(
-        card
-          .querySelector(".release-info p:nth-child(4)")
-          .textContent.split("(")[0]
-          .replace("Rating: ", ""),
-      ),
-      vote_count: parseInt(
-        card
-          .querySelector(".release-info p:nth-child(4)")
-          .textContent.match(/\((\d+)/)[1],
-      ),
-      tmdb_url: card.querySelector("a").href,
-    }));
+    // Get all release cards
+    const cards = Array.from(
+      releasesContainer.getElementsByClassName("release-card"),
+    );
 
-    releasesContainer.innerHTML = releases
-      .map((release) => createReleaseCard(release))
-      .join("");
+    // Remove cards that are in hidden media
+    cards.forEach((card) => {
+      const mediaType = card.querySelector(".request-button").dataset.mediaType;
+      const id = parseInt(card.dataset.id);
+
+      if (isHidden(mediaType, id)) {
+        card.remove();
+      }
+    });
   }
 
-  // Add refresh button listener
-  const refreshButton = document.getElementById("refreshButton");
-  if (refreshButton) {
-    refreshButton.addEventListener("click", refreshData);
-  }
-
-  // Setup request buttons
-  setupRequestButtons();
+  setupButtons();
 });
 
 async function refreshData() {
@@ -47,11 +25,8 @@ async function refreshData() {
   const lastUpdateEl = document.getElementById("lastUpdate");
   const releasesContainer = document.getElementById("releases-container");
 
-  // Add loading states
   button.disabled = true;
   button.textContent = "Refreshing...";
-  button.classList.add("refreshing");
-  releasesContainer.classList.add("releases-loading");
 
   try {
     const data = await fetchFromAPI("/api/refresh", {
@@ -59,29 +34,17 @@ async function refreshData() {
     });
 
     if (data.success) {
-      // Prepare new content but don't insert it yet
-      const newContent = data.releases
+      // Filter out hidden media before creating cards
+      const visibleReleases = data.releases.filter(
+        (release) => !isHidden(release.media_type, release.id),
+      );
+
+      lastUpdateEl.textContent = `Last updated: ${new Date(data.lastUpdate).toUTCString()}`;
+      releasesContainer.innerHTML = visibleReleases
         .map((release) => createReleaseCard(release))
         .join("");
 
-      // Update timestamp
-      lastUpdateEl.textContent = `Last updated: ${new Date(data.lastUpdate).toUTCString()}`;
-
-      // Fade out current content
-      releasesContainer.style.opacity = "0";
-
-      // Wait for fade out
-      await new Promise((resolve) => setTimeout(resolve, 300));
-
-      // Update content
-      releasesContainer.innerHTML = newContent;
-
-      // Fade in new content
-      releasesContainer.style.opacity = "1";
-
-      // Setup new buttons
-      setupRequestButtons();
-
+      setupButtons();
       showNotification("Data refreshed successfully", "success");
     } else {
       throw new Error(data.error || "Refresh failed");
@@ -90,11 +53,8 @@ async function refreshData() {
     console.error("Refresh failed:", error);
     showNotification("Failed to refresh data: " + error.message, "error");
   } finally {
-    // Remove loading states
     button.disabled = false;
     button.textContent = "Refresh Data";
-    button.classList.remove("refreshing");
-    releasesContainer.classList.remove("releases-loading");
   }
 }
 
@@ -102,17 +62,13 @@ function createReleaseCard(release) {
   return `
         <div class="release-card" data-id="${release.id}">
             <div class="image-wrapper">
-                <img
-                    src="${release.poster_url}"
-                    alt="${release.title} poster"
-                    loading="lazy"
-                />
+                <img src="${release.poster_url}"
+                     alt="${release.title} poster"
+                     loading="lazy">
                 <div class="tmdb-overlay">
-                    <a
-                        href="${release.tmdb_url}"
-                        class="tmdb-link"
-                        target="_blank"
-                    >
+                    <a href="${release.tmdb_url}"
+                       class="tmdb-link"
+                       target="_blank">
                         View on TMDB
                     </a>
                 </div>
@@ -121,33 +77,33 @@ function createReleaseCard(release) {
                 <h3>${release.title}</h3>
                 <p>Release Date: ${release.release_date}</p>
                 <p>Type: ${release.media_type}</p>
-                <p>
-                    Rating: ${release.vote_average.toFixed(1)} (${release.vote_count}
-                    votes)
-                </p>
-                <button
-                    class="request-button"
-                    data-media-type="${release.media_type}"
-                    data-id="${release.id}"
-                >
-                    Request
-                </button>
+                <p>Rating: ${release.vote_average} (${release.vote_count} votes)</p>
+                <div class="button-group">
+                    <button class="request-button"
+                            data-media-type="${release.media_type}"
+                            data-id="${release.id}">
+                        Request
+                    </button>
+                    <button class="hide-button"
+                            data-media-type="${release.media_type}"
+                            data-id="${release.id}">
+                        Hide
+                    </button>
+                </div>
             </div>
         </div>
     `;
 }
 
-function setupRequestButtons() {
+// Hide buttons:
+
+function setupButtons() {
+  // Setup request buttons
   document.querySelectorAll(".request-button").forEach((button) => {
     // Remove existing listeners to prevent duplicates
-    button.replaceWith(button.cloneNode(true));
+    const newButton = button.cloneNode(true);
+    button.parentNode.replaceChild(newButton, button);
 
-    // Get the fresh button reference after replacement
-    const newButton = document.querySelector(
-      `.request-button[data-id="${button.dataset.id}"]`,
-    );
-
-    // Add new listener with loading state
     newButton.addEventListener("click", async (event) => {
       const button = event.target;
       const card = button.closest(".release-card");
@@ -156,17 +112,53 @@ function setupRequestButtons() {
       try {
         button.disabled = true;
         button.textContent = "Requesting...";
-        card.classList.add("loading");
 
         await requestMedia(mediaType, id);
 
-        button.textContent = "Requested";
-        button.classList.add("requested");
+        // Animate and remove the card
+        card.style.transition = "all 0.3s ease";
+        card.style.opacity = "0";
+        card.style.transform = "scale(0.9)";
+
+        setTimeout(() => {
+          card.remove();
+        }, 300);
       } catch (error) {
-        button.textContent = "Request Failed";
         console.error("Request failed:", error);
-      } finally {
-        card.classList.remove("loading");
+        button.disabled = false;
+        button.textContent = "Request";
+        showNotification("Failed to request media: " + error.message, "error");
+      }
+    });
+  });
+
+  // Setup hide buttons
+  document.querySelectorAll(".hide-button").forEach((button) => {
+    const newButton = button.cloneNode(true);
+    button.parentNode.replaceChild(newButton, button);
+
+    newButton.addEventListener("click", async (event) => {
+      const button = event.target;
+      const card = button.closest(".release-card");
+      const { mediaType, id } = button.dataset;
+
+      try {
+        button.disabled = true;
+        button.textContent = "Hiding...";
+
+        if (await hideMedia(mediaType, parseInt(id))) {
+          card.style.transition = "all 0.3s ease";
+          card.style.opacity = "0";
+          card.style.transform = "scale(0.9)";
+
+          setTimeout(() => {
+            card.remove();
+          }, 300);
+        }
+      } catch (error) {
+        console.error("Hide failed:", error);
+        button.disabled = false;
+        button.textContent = "Hide";
       }
     });
   });

@@ -39,13 +39,22 @@
                 Rating: {{ release.vote_average }} ({{ release.vote_count }}
                 votes)
             </p>
-            <button
-                class="request-button"
-                data-media-type="{{ release.media_type }}"
-                data-id="{{ release.id }}"
-            >
-                Request
-            </button>
+            <div class="button-group">
+                <button
+                    class="request-button"
+                    data-media-type="{{ release.media_type }}"
+                    data-id="{{ release.id }}"
+                >
+                    Request
+                </button>
+                <button
+                    class="hide-button"
+                    data-media-type="{{ release.media_type }}"
+                    data-id="{{ release.id }}"
+                >
+                    Hide
+                </button>
+            </div>
         </div>
     </div>
     {% endfor %}

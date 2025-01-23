@@ -178,3 +178,36 @@
         padding: 0.6rem;
     }
 }
+.button-group {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.8rem;
+}
+
+.button-group button {
+    flex: 1;
+    padding: 0.6rem;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: background-color 0.3s;
+}
+
+.request-button {
+    background-color: #4caf50;
+    color: white;
+}
+
+.request-button:hover {
+    background-color: #45a049;
+}
+
+.hide-button {
+    background-color: #f44336;
+    color: white;
+}
+
+.hide-button:hover {
+    background-color: #d32f2f;
+}

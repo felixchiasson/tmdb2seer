@@ -1,8 +1,39 @@
+use crate::api::tmdb::Release;
 use crate::AppConfig;
 use reqwest;
 use secrecy::ExposeSecret;
+use serde::Deserialize;
 use std::fmt;
 use tracing::{debug, error, info};
+
+#[derive(Debug, Deserialize)]
+struct JellyseerrMediaResponse {
+    pageInfo: PageInfo,
+    results: Vec<RequestResult>,
+}
+
+#[derive(Debug, Deserialize)]
+struct PageInfo {
+    pages: i32,
+    pageSize: i32,
+    results: i32,
+    page: i32,
+}
+
+#[derive(Debug, Deserialize)]
+struct RequestResult {
+    #[serde(rename = "type")]
+    request_type: String,
+    media: MediaInfo,
+}
+
+#[derive(Debug, Deserialize)]
+struct MediaInfo {
+    #[serde(rename = "mediaType")] // Match exact field name from JSON
+    media_type: String,
+    #[serde(rename = "tmdbId")] // Match exact field name from JSON
+    tmdb_id: i32,
+}
 
 #[derive(Debug)]
 pub enum JellyseerrError {
@@ -75,4 +106,49 @@ pub async fn request_media(
     );
 
     Ok(())
+}
+
+pub async fn filter_requested_media(
+    config: &AppConfig,
+    releases: Vec<Release>,
+) -> Result<Vec<Release>, JellyseerrError> {
+    let client = reqwest::Client::new();
+
+    let url = format!("{}/api/v1/request?take=50", &config.jellyseerr_url);
+
+    let response = client
+        .get(&url)
+        .header("accept", "application/json")
+        .header(
+            "X-Api-Key",
+            config.jellyseerr_api_key.expose_secret().to_string(),
+        )
+        .send()
+        .await
+        .map_err(JellyseerrError::Request)?;
+
+    if !response.status().is_success() {
+        return Err(JellyseerrError::Other(format!(
+            "Failed to check media status: {}",
+            response.status()
+        )));
+    }
+
+    let text = response.text().await.map_err(JellyseerrError::Request)?;
+
+    let data: JellyseerrMediaResponse = serde_json::from_str(&text)
+        .map_err(|e| JellyseerrError::Other(format!("Failed to parse response: {}", e)))?;
+
+    let requested_media: std::collections::HashSet<(String, i32)> = data
+        .results
+        .iter()
+        .map(|request| (request.media.media_type.clone(), request.media.tmdb_id))
+        .collect();
+
+    let filtered_releases = releases
+        .into_iter()
+        .filter(|release| !requested_media.contains(&(release.media_type.clone(), release.id)))
+        .collect();
+
+    Ok(filtered_releases)
 }
