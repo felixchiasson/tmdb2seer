@@ -1,6 +1,7 @@
 use secrecy::{ExposeSecret, Secret};
 use serde::{Deserialize, Serialize};
 use std::error::Error;
+use std::fmt;
 use tracing::{debug, error};
 
 #[derive(Debug, Deserialize)]
@@ -22,7 +23,26 @@ pub struct TMDBResponse {
     pub results: Vec<TMDBResult>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug)]
+pub enum TMDBError {
+    Request(reqwest::Error),
+    Parse(serde_json::Error),
+    Other(String),
+}
+
+impl std::error::Error for TMDBError {}
+
+impl fmt::Display for TMDBError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TMDBError::Request(e) => write!(f, "Request (reqwest) error: {}", e),
+            TMDBError::Parse(e) => write!(f, "Parse (serde) error: {}", e),
+            TMDBError::Other(e) => write!(f, "Error: {}", e),
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Clone)]
 pub struct Release {
     pub id: i32,
     pub title: String,
@@ -34,9 +54,7 @@ pub struct Release {
     pub tmdb_url: String,
 }
 
-pub async fn fetch_latest_releases(
-    api_key: &Secret<String>,
-) -> Result<Vec<Release>, Box<dyn Error>> {
+pub async fn fetch_latest_releases(api_key: &Secret<String>) -> Result<Vec<Release>, TMDBError> {
     let client = reqwest::Client::new();
     let url = format!(
         "https://api.themoviedb.org/3/trending/all/week?api_key={}",
@@ -53,27 +71,13 @@ pub async fn fetch_latest_releases(
         .header("accept", "application/json")
         .send()
         .await
-        .map_err(|e| {
-            error!("TMDB request failed: {}", e);
-            e
-        })?;
+        .map_err(TMDBError::Request)?;
 
     let status = response.status();
     debug!("TMDB response status: {}", status);
 
-    if !status.is_success() {
-        error!("TMDB request failed with status: {}", status);
-        return Err(format!("TMDB request failed: {}", status).into());
-    }
-
-    let text = response.text().await.map_err(|e| {
-        error!("Failed to get response text: {}", e);
-        e
-    })?;
-    let response: TMDBResponse = serde_json::from_str(&text).map_err(|e| {
-        error!("Failed to parse TMDB response: {}", e);
-        e
-    })?;
+    let text = response.text().await.map_err(TMDBError::Request)?;
+    let response: TMDBResponse = serde_json::from_str(&text).map_err(TMDBError::Parse)?;
 
     debug!(
         "Successfully fetched {} TMDB results",

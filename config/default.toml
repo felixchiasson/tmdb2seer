@@ -1,5 +1,6 @@
 [tmdb]
 api_key = "your-default-key-here"
+refresh_interval = 300            # seconds
 
 [jellyseerr]
 api_key = "your-default-key-here"

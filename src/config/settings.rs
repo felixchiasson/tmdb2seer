@@ -9,6 +9,7 @@ use crate::security::deserialize::deserialize_secret_string;
 pub struct TMDBConfig {
     #[serde(deserialize_with = "deserialize_secret_string")]
     pub api_key: Secret<String>,
+    pub refresh_interval: u64,
 }
 
 #[derive(Debug, Deserialize)]

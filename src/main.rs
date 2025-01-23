@@ -1,5 +1,6 @@
 use std::sync::Arc;
-use tmdb2seer::{init_config, init_router, AppResult};
+use std::time::Duration;
+use tmdb2seer::{api, init_config, init_router, AppResult, AppState};
 use tracing::Level;
 use tracing::{error, info};
 
@@ -21,9 +22,22 @@ async fn main() -> AppResult<()> {
 
     tracing_subscriber::fmt().with_max_level(level).init();
 
-    let config = Arc::new(init_config()?);
+    let config = init_config()?;
+    let state = AppState::new(config);
 
-    let app = init_router(config.clone());
+    let background_state = state.clone();
+    let refresh_interval = Duration::from_secs(settings.tmdb.refresh_interval);
+
+    // Background task refresh
+    tokio::spawn(async move {
+        api::tasks::refresh_releases(background_state, refresh_interval).await;
+    });
+
+    if let Err(e) = api::tmdb::fetch_latest_releases(&state.config.tmdb_api_key).await {
+        error!("Failed initial fetch of latest releases: {}", e);
+    }
+
+    let app = init_router(state);
 
     let addr = std::net::SocketAddr::from((
         settings

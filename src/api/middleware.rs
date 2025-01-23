@@ -4,6 +4,7 @@ use http::{Request, StatusCode};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tower::Service;
+use tracing::{debug, warn};
 
 use super::rate_limiter::RateLimiter;
 
@@ -62,9 +63,11 @@ where
                 .map(|ConnectInfo(addr)| addr.ip().to_string())
                 .unwrap_or_else(|| "unknown".to_string());
 
-            if layer.limiter.is_allowed(connect_info).await {
+            if layer.limiter.is_allowed(connect_info.clone()).await {
+                debug!("Request allowed from {}", connect_info);
                 inner.call(request).await
             } else {
+                warn!("Rate limit exceeded for IP: {}", connect_info);
                 Ok(StatusCode::TOO_MANY_REQUESTS.into_response())
             }
         })
