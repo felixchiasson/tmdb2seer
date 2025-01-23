@@ -19,6 +19,7 @@ use chrono::{DateTime, Utc};
 use secrecy::Secret;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use tower_http::services::ServeDir;
 
 #[derive(Clone)]
 pub struct AppConfig {
@@ -85,26 +86,29 @@ pub fn init_config() -> AppResult<AppConfig> {
     })
 }
 
-pub fn init_router(config: AppState) -> axum::Router {
+pub fn init_router(state: AppState) -> axum::Router {
     use crate::api::{handlers, middleware::RateLimitServiceLayer};
     use axum::{
         routing::{get, post},
         Router,
     };
 
+    let static_service = ServeDir::new("static");
+
     let api_router = Router::new()
         .route("/refresh", post(handlers::refresh))
         .route(
             "/request/{media_type}/{id}",
             post(handlers::add_to_jellyseerr),
-        );
+        )
+        .layer(RateLimitServiceLayer::new(
+            state.config.rate_limit.requests_per_second,
+            state.config.rate_limit.burst_size,
+        ));
 
     Router::new()
         .route("/", get(handlers::index))
         .nest("/api", api_router)
-        .layer(RateLimitServiceLayer::new(
-            config.config.rate_limit.requests_per_second,
-            config.config.rate_limit.burst_size,
-        ))
-        .with_state(config)
+        .nest_service("/static", static_service)
+        .with_state(state)
 }

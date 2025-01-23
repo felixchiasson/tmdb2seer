@@ -1,206 +1,58 @@
-<!doctype html>
-<html>
-    <head>
-        <meta name="csrf-token" content="{{ csrf_token }}">
-        <title>Latest Releases</title>
-        <style>
-            table {
-                width: 100%;
-                border-collapse: collapse;
-            }
-            th,
-            td {
-                padding: 8px;
-                text-align: left;
-                border-bottom: 1px solid #ddd;
-            }
-            button {
-                padding: 5px 10px;
-                cursor: pointer;
-            }
-            .poster-img {
-                width: 100px;
-                height: auto;
-                border-radius: 4px;
-                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-                transition: transform: 0.2s;
-            }
-            .poster-img:hover {
-                transform: scale(1.1);
-            }
-            @media (max-width: 768px) {
-                .poster-img {
-                    width: 50px;
-                }
-            }
-            .release-row {
-                vertical-align: middle;
-            }
-            .poster-link {
-                        display: inline-block;
-                        position: relative;
-                    }
-                    .poster-link:hover::after {
-                        content: 'View on TMDB';
-                        position: absolute;
-                        bottom: 0;
-                        left: 0;
-                        right: 0;
-                        background: rgba(0,0,0,0.7);
-                        color: white;
-                        padding: 4px;
-                        text-align: center;
-                        font-size: 12px;
-                        border-bottom-left-radius: 4px;
-                        border-bottom-right-radius: 4px;
-                    }
-                    .refresh-container {
-                        display: flex;
-                        align-items: center;
-                        gap: 1rem;
-                        margin: 1rem 0;
-                    }
+{% extends "base.html" %} {% block styles %}
+<link rel="stylesheet" href="/static/css/table.css" />
+<link rel="stylesheet" href="/static/css/components/refresh.css" />
+{% endblock %} {% block scripts %}
+<script src="/static/js/api.js" defer></script>
+<script src="/static/js/components/refresh.js" defer></script>
+{% endblock %} {% block content %}
+<div class="refresh-container">
+    <button id="refreshButton">Refresh Data</button>
+    <span id="lastUpdate"
+        >Last updated: {{ last_update.format("%Y-%m-%d %H:%M:%S UTC") }}</span
+    >
+</div>
 
-                    #refreshButton {
-                        padding: 0.5rem 1rem;
-                        background-color: #4CAF50;
-                        color: white;
-                        border: none;
-                        border-radius: 4px;
-                        cursor: pointer;
-                        transition: background-color 0.3s;
-                    }
-
-                    #refreshButton:hover {
-                        background-color: #45a049;
-                    }
-
-                    #refreshButton:disabled {
-                        background-color: #cccccc;
-                        cursor: not-allowed;
-                    }
-
-                    #lastUpdate {
-                        color: #666;
-                        font-size: 0.9rem;
-                    }
-        </style>
-    </head>
-    <body>
-        <script>
-            async function requestMedia(mediaType, id) {
-                const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-
-                try {
-                    const response = await fetch(
-                        `/api/request/${mediaType}/${id}`,
-                        {
-                            method: "POST",
-                            headers: {
-                                'X-CSRF-Token': csrfToken,
-                                'Content-Type': 'application/json'
-                            }
-                        }
-                    );
-
-                    console.log("Response status:", response.status);
-
-                    if (response.ok) {
-                        alert("Request submitted to Jellyseerr successfully!");
-                    } else {
-                        const text = await response.text();
-                        console.error("Error details:", {
-                            status: response.status,
-                            statusText: response.statusText,
-                            responseText: text
-                        });
-                        throw new Error(`Failed to submit request: ${response.status}`);
-                    }
-                } catch (error) {
-                    console.error('Error submitting request:', error);
-                    alert(`Error: ${error.message}`);
-                }
-            }
-            </script>
-            <script>
-            async function refreshData() {
-                const button = document.getElementById('refreshButton');
-                button.disabled = true;
-                button.textContent = 'Refreshing...';
-
-                try {
-                    const response = await fetch('/api/refresh', {
-                        method: 'POST',
-                        headers: {
-                            'X-CSRF-Token': '{{ csrf_token }}'
-                        }
-                    });
-
-                    if (!response.ok) {
-                        throw new Error(`HTTP error! status: ${response.status}`);
-                    }
-
-                    // Reload the page to show new data
-                    window.location.reload();
-                } catch (error) {
-                    console.error('Refresh failed:', error);
-                    alert('Failed to refresh data. Please try again.');
-                } finally {
-                    button.disabled = false;
-                    button.textContent = 'Refresh Data';
-                }
-            }
-            </script>
-        <h1>Latest Releases</h1>
-        <div class="refresh-container">
-            <button id="refreshButton" onclick="refreshData()">Refresh Data</button>
-            <span id="lastUpdate">Last updated: {{ last_update.format("%Y-%m-%d %H:%M:%S UTC") }}</span>
+<div id="releases-container">
+    {% for release in releases %}
+    <div class="release-card" data-id="{{ release.id }}">
+        <div class="image-wrapper">
+            <img
+                src="{{ release.poster_url }}"
+                alt="{{ release.title }} poster"
+                loading="lazy"
+            />
+            <div class="tmdb-overlay">
+                <a
+                    href="{{ release.tmdb_url }}"
+                    class="tmdb-link"
+                    target="_blank"
+                >
+                    View on TMDB
+                </a>
+            </div>
         </div>
-        <div id=""releases-content">
-        <table>
-            <thead>
-                <tr>
-                    <th>Poster</th>
-                    <th>Title</th>
-                    <th>Release Date</th>
-                    <th>Average Rating (n)</th>
-                    <th>Type</th>
-                    <th>Action</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for release in releases %}
-                <tr class="release-row">
-                    <td>
-                        <a
-                            href="{{ release.tmdb_url }}"
-                            target="_blank"
-                            class="poster-link"
-                        >
-                            <img
-                                src="{{ release.poster_url }}"
-                                alt="{{ release.title }}"
-                                class="poster-img"
-                            />
-                        </a>
-                    </td>
-                    <td>{{ release.title }}</td>
-                    <td>{{ release.release_date }}</td>
-                    <td>
-                        {{ release.vote_average }} ({{ release.vote_count }})
-                    </td>
-                    <td>{{ release.media_type }}</td>
-                    <td>
-                        <button
-                            onclick="requestMedia('{{ release.media_type }}', {{ release.id }})"
-                        >
-                            Request on Jellyseerr
-                        </button>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+        <div class="release-info">
+            <h3>{{ release.title }}</h3>
+            <p>Release Date: {{ release.release_date }}</p>
+            <p>Type: {{ release.media_type }}</p>
+            <p>
+                Rating: {{ release.vote_average }} ({{ release.vote_count }}
+                votes)
+            </p>
+            <button
+                class="request-button"
+                data-media-type="{{ release.media_type }}"
+                data-id="{{ release.id }}"
+            >
+                Request
+            </button>
         </div>
-    </body>
-</html>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Pass server-side variables to JavaScript -->
+<script>
+    window.CSRF_TOKEN = "{{ csrf_token }}";
+</script>
+{% endblock %}

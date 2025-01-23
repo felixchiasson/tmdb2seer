@@ -1,0 +1,180 @@
+/* Release Container */
+#releases-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1rem;
+    padding: 1rem 0;
+}
+
+/* Release Card */
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+.release-card {
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+    transition:
+        transform 0.3s ease,
+        box-shadow 0.3s ease;
+    max-width: 300px;
+    margin: 0 auto;
+    position: relative; /* For overlay positioning */
+    animation: fadeInUp 1s ease forwards;
+    opacity: 0;
+}
+
+.release-card:hover {
+    transform: translateY(-8px);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+}
+
+/* Card Image */
+.release-card img {
+    width: 100%;
+    height: 300px;
+    object-fit: cover;
+    border-bottom: 1px solid #eee;
+    display: block;
+    transition: transform 0.3s ease;
+}
+
+/* TMDB Link Overlay */
+.tmdb-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 300px; /* Same as image height */
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    pointer-events: none; /* Allow clicks to pass through by default */
+    z-index: 2;
+}
+
+.release-card:hover .tmdb-overlay {
+    opacity: 1;
+    pointer-events: auto; /* Enable clicks when visible */
+}
+
+.tmdb-link {
+    color: white;
+    text-decoration: none;
+    padding: 8px 16px;
+    border: 2px solid white;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    transform: translateY(20px);
+    transition: transform 0.3s ease;
+}
+
+.tmdb-link:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.release-card:hover .tmdb-link {
+    transform: translateY(0);
+}
+
+/* Card Info Section */
+.release-info {
+    padding: 0.8rem;
+}
+
+.release-info h3 {
+    margin: 0 0 0.4rem 0;
+    font-size: 1rem;
+    color: #333;
+}
+
+.release-info p {
+    margin: 0.3rem 0;
+    color: #666;
+    font-size: 0.8rem;
+}
+
+/* Links and Buttons */
+.release-info button {
+    display: block;
+    width: 100%;
+    padding: 0.6rem;
+    margin-top: 0.8rem;
+    background-color: #4caf50;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition:
+        background-color 0.3s ease,
+        transform 0.2s ease;
+    overflow: hidden;
+    position: relative;
+    font-size: 0.9rem;
+}
+
+.release-info button:hover {
+    background-color: #45a049;
+}
+
+.release-info button:active {
+    transform: scale(0.95);
+}
+
+.release-info button::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    transition:
+        width 0.3s ease,
+        height 0.3s ease;
+}
+
+.release-info button:active::after {
+    width: 200%;
+    height: 200%;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    #releases-container {
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    }
+
+    .release-card img,
+    .tmdb-overlay {
+        height: 225px;
+    }
+}
+
+@media (max-width: 480px) {
+    #releases-container {
+        grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    }
+
+    .release-card img,
+    .tmdb-overlay {
+        height: 200px;
+    }
+
+    .release-info {
+        padding: 0.6rem;
+    }
+}

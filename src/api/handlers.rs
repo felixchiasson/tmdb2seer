@@ -2,10 +2,12 @@ use askama::Template;
 use axum::{
     extract::{Path, State},
     response::{Html, IntoResponse},
+    Json,
 };
 use chrono::{DateTime, Utc};
 use http::{HeaderMap, Response, StatusCode};
-use tracing::{debug, error, info};
+use serde_json::json;
+use tracing::{error, info};
 
 use super::tmdb::Release;
 use super::{jellyseerr, tmdb};
@@ -44,6 +46,8 @@ pub async fn add_to_jellyseerr(
     State(state): State<AppState>,
     Path((media_type, id)): Path<(String, i32)>,
 ) -> impl IntoResponse {
+    info!("Received request for {}/{}", media_type, id);
+
     if let Some(token) = headers.get("X-CSRF-Token") {
         if token.is_empty() {
             error!("Empty CSRF token received");
@@ -66,14 +70,19 @@ pub async fn add_to_jellyseerr(
                 "Successfully added media {}/{} to Jellyseerr",
                 media_type, id
             );
-            StatusCode::OK.into_response()
+            Json(json!({
+                "success": true,
+                "message": "Media requested successfully"
+            }))
+            .into_response()
         }
         Err(e) => {
             error!("Error requesting media: {}", e);
-            Response::builder()
-                .status(StatusCode::INTERNAL_SERVER_ERROR)
-                .body(axum::body::Body::from("Internal Server Error"))
-                .unwrap()
+            Json(json!({
+                "success": false,
+                "error": e.to_string()
+            }))
+            .into_response()
         }
     }
 }
@@ -99,13 +108,18 @@ pub async fn refresh(headers: HeaderMap, State(state): State<AppState>) -> impl 
     match tmdb::fetch_latest_releases(&state.config.tmdb_api_key).await {
         Ok(new_releases) => {
             let mut releases = state.releases.write().await;
-            *releases = new_releases;
+            *releases = new_releases.clone();
 
             let mut last_update = state.last_update.write().await;
             *last_update = Utc::now();
 
             info!("Manual refresh successful");
-            StatusCode::OK.into_response()
+            Json(json!({
+                "success": true,
+                "releases": new_releases,
+                "lastUpdate": Utc::now().to_rfc3339(),
+            }))
+            .into_response()
         }
         Err(e) => {
             error!("Failed to manually refresh releases: {}", e);
