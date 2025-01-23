@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use std::time::Duration;
 use tmdb2seer::{api, init_config, init_router, AppResult, AppState};
 use tracing::Level;

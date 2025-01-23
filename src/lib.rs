@@ -17,6 +17,7 @@ use crate::api::tmdb::Release;
 use crate::config::settings::Settings;
 use chrono::{DateTime, Utc};
 use secrecy::Secret;
+use serde_json;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tower_http::services::ServeDir;
@@ -131,4 +132,8 @@ pub fn get_template_path() -> String {
     } else {
         "dist/templates".to_string()
     }
+}
+
+pub fn json_encode<T: serde::Serialize>(value: &T) -> askama::Result<String> {
+    serde_json::to_string(value).map_err(|_| askama::Error::Fmt(std::fmt::Error))
 }

@@ -211,3 +211,22 @@
 .hide-button:hover {
     background-color: #d32f2f;
 }
+.season-selector {
+    margin: 0.8rem 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.season-select {
+    flex: 1;
+    padding: 0.3rem;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background-color: white;
+}
+
+.season-select:focus {
+    outline: none;
+    border-color: #4caf50;
+}

@@ -6,18 +6,23 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use http::{HeaderMap, Response, StatusCode};
+use serde::Deserialize;
 use serde_json::json;
 use tracing::{error, info};
 
-use super::tmdb::Release;
 use super::{jellyseerr, tmdb};
 use crate::security;
 use crate::AppState;
 
+#[derive(Deserialize)]
+pub struct MediaRequest {
+    seasons: Option<Vec<i32>>,
+}
+
 #[derive(Template)]
 #[template(path = "../templates/index.html")]
 struct IndexTemplate {
-    releases: Vec<Release>,
+    releases: String,
     last_update: DateTime<Utc>,
     csrf_token: String,
 }
@@ -26,8 +31,10 @@ pub async fn index(State(state): State<AppState>) -> Html<String> {
     let releases = state.releases.read().await;
     let last_update = state.last_update.read().await;
 
+    let releases_json = serde_json::to_string(&*releases).unwrap_or_else(|_| "[]".to_string());
+
     let template = IndexTemplate {
-        releases: releases.clone(),
+        releases: releases_json,
         last_update: *last_update,
         csrf_token: security::csrf::generate_csrf_token(),
     };
@@ -45,6 +52,7 @@ pub async fn add_to_jellyseerr(
     headers: HeaderMap,
     State(state): State<AppState>,
     Path((media_type, id)): Path<(String, i32)>,
+    Json(payload): Json<MediaRequest>,
 ) -> impl IntoResponse {
     info!("Received request for {}/{}", media_type, id);
 
@@ -64,7 +72,13 @@ pub async fn add_to_jellyseerr(
             .unwrap();
     }
 
-    match jellyseerr::request_media(&state.config, id, &media_type).await {
+    let seasons = if media_type == "tv" {
+        payload.seasons
+    } else {
+        None
+    };
+
+    match jellyseerr::request_media(&state.config, id, &media_type, seasons).await {
         Ok(_) => {
             info!(
                 "Successfully added media {}/{} to Jellyseerr",

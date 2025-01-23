@@ -24,6 +24,7 @@ thiserror = "1.0"
 config = { version = "0.15.6", features = ["toml"] }
 base64 = "0.22.1"
 rand = "0.8.5"
+dashmap = "6.1.0"
 
 [build-dependencies]
 minify-html = "0.15.0"

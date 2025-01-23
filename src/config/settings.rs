@@ -1,7 +1,7 @@
 use config::{Config, ConfigError, Environment, File};
 use secrecy::{ExposeSecret, Secret};
 use serde::Deserialize;
-use std::{env, path::Path};
+use std::env;
 use tracing::warn;
 
 use crate::security::deserialize::deserialize_secret_string;

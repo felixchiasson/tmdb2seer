@@ -25,9 +25,19 @@ export class API {
     return response.json();
   }
 
-  static async requestMedia(mediaType, id) {
+  static async requestMedia(mediaType, id, seasons = null) {
+    const requestData = {
+      mediaType,
+      mediaId: id,
+    };
+
+    if (mediaType === "tv") {
+      requestData.seasons = seasons === "all" ? [] : [parseInt(seasons)];
+    }
+
     return this.fetchFromAPI(`/api/request/${mediaType}/${id}`, {
       method: "POST",
+      body: JSON.stringify(requestData),
     });
   }
 

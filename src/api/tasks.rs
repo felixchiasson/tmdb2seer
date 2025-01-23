@@ -1,10 +1,9 @@
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use tokio::time::{interval, Duration};
 use tracing::{error, info};
 
 use super::tmdb;
 use crate::api::jellyseerr;
-use crate::api::tmdb::TMDBError;
 use crate::AppState;
 
 pub async fn refresh_releases(state: AppState, refresh_interval: Duration) {

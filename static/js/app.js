@@ -11,8 +11,38 @@ class App {
   setupEventListeners() {
     document.addEventListener("DOMContentLoaded", () => {
       this.setupRefreshButton();
+      this.initializeCards();
       this.setupReleaseCards();
     });
+  }
+
+  initializeCards() {
+    const container = document.getElementById("releases-container");
+    if (!container) return;
+
+    try {
+      // Get the releases data from the data attribute
+      const releasesData = JSON.parse(container.dataset.releases || "[]");
+
+      // Set CSRF token for later use
+      window.CSRF_TOKEN = container.dataset.csrfToken;
+
+      // Filter out hidden releases
+      const visibleReleases = releasesData.filter(
+        (release) => !ReleaseManager.isHidden(release.media_type, release.id),
+      );
+
+      // Create and insert cards
+      container.innerHTML = visibleReleases
+        .map((release) => ReleaseManager.createReleaseCard(release))
+        .join("");
+
+      // Setup button handlers
+      this.setupReleaseCards();
+    } catch (error) {
+      console.error("Failed to initialize cards:", error);
+      NotificationManager.show("Failed to initialize cards", "error");
+    }
   }
 
   setupRefreshButton() {
@@ -74,10 +104,21 @@ class App {
 
         try {
           button.disabled = true;
-          button.textContent = "Requesting...";
+          button.textContent = `Requesting ${mediaType === "tv" ? "Season" : "Movie"}...`;
 
-          await API.requestMedia(mediaType, id);
-          NotificationManager.show("Media requested successfully", "success");
+          let seasons = null;
+          if (mediaType === "tv") {
+            const seasonSelect = card.querySelector(".season-select");
+            if (seasonSelect) {
+              seasons = seasonSelect.value;
+            }
+          }
+
+          await API.requestMedia(mediaType, parseInt(id), seasons);
+          NotificationManager.show(
+            `${mediaType === "tv" ? "TV Show" : "Movie"} requested successfully`,
+            "success",
+          );
 
           card.style.transition = "all 0.3s ease";
           card.style.opacity = "0";
@@ -87,9 +128,9 @@ class App {
         } catch (error) {
           console.error("Request failed:", error);
           button.disabled = false;
-          button.textContent = "Request";
+          button.textContent = `Request ${mediaType === "tv" ? "Season" : "Movie"}`;
           NotificationManager.show(
-            "Failed to request media: " + error.message,
+            `Failed to request ${mediaType === "tv" ? "TV Show" : "Movie"}: ${error.message}`,
             "error",
           );
         }

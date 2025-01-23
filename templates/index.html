@@ -1,64 +1,19 @@
 {% extends "base.html" %} {% block styles %}
 <link rel="stylesheet" href="/static/css/table.css" />
 <link rel="stylesheet" href="/static/css/components/refresh.css" />
-{% endblock %} {% block content %}
+{% endblock styles %} {% block content %}
 <div class="refresh-container">
     <button id="refreshButton">Refresh Data</button>
-    <span id="lastUpdate"
-        >Last updated: {{ last_update.format("%Y-%m-%d %H:%M:%S UTC") }}</span
-    >
+    <span id="lastUpdate">Last updated: {{ last_update }}</span>
 </div>
-
-<div id="releases-container">
-    {% for release in releases %}
-    <div class="release-card" data-id="{{ release.id }}">
-        <div class="image-wrapper">
-            <img
-                src="{{ release.poster_url }}"
-                alt="{{ release.title }} poster"
-                loading="lazy"
-            />
-            <div class="tmdb-overlay">
-                <a
-                    href="{{ release.tmdb_url }}"
-                    class="tmdb-link"
-                    target="_blank"
-                >
-                    View on TMDB
-                </a>
-            </div>
-        </div>
-        <div class="release-info">
-            <h3>{{ release.title }}</h3>
-            <p>Release Date: {{ release.release_date }}</p>
-            <p>Type: {{ release.media_type }}</p>
-            <p>
-                Rating: {{ release.vote_average }} ({{ release.vote_count }}
-                votes)
-            </p>
-            <div class="button-group">
-                <button
-                    class="request-button"
-                    data-media-type="{{ release.media_type }}"
-                    data-id="{{ release.id }}"
-                >
-                    Request
-                </button>
-                <button
-                    class="hide-button"
-                    data-media-type="{{ release.media_type }}"
-                    data-id="{{ release.id }}"
-                >
-                    Hide
-                </button>
-            </div>
-        </div>
-    </div>
-    {% endfor %}
-</div>
+<div
+    id="releases-container"
+    data-releases="{{ releases }}"
+    data-csrf-token="{{ csrf_token }}"
+></div>
+{% endblock content %}
 
 <!-- Pass server-side variables to JavaScript -->
 <script>
     window.CSRF_TOKEN = "{{ csrf_token }}";
 </script>
-{% endblock %}

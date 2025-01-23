@@ -8,16 +8,7 @@ use tracing::{debug, error, info};
 
 #[derive(Debug, Deserialize)]
 struct JellyseerrMediaResponse {
-    pageInfo: PageInfo,
     results: Vec<RequestResult>,
-}
-
-#[derive(Debug, Deserialize)]
-struct PageInfo {
-    pages: i32,
-    pageSize: i32,
-    results: i32,
-    page: i32,
 }
 
 #[derive(Debug, Deserialize)]
@@ -56,6 +47,7 @@ pub async fn request_media(
     config: &AppConfig,
     tmdb_id: i32,
     media_type: &str,
+    season: Option<Vec<i32>>,
 ) -> Result<(), JellyseerrError> {
     debug!("Requesting media: type={}, id={}", media_type, tmdb_id);
     let client = reqwest::Client::new();
@@ -64,10 +56,24 @@ pub async fn request_media(
     let url = format!("{}/api/v1/request", &config.jellyseerr_url);
 
     // Create the request body
-    let body = serde_json::json!({
-        "mediaType": if media_type == "tv" { "tv" } else { "movie" },
-        "mediaId": tmdb_id,
-    });
+    let body = match media_type {
+        "movie" => serde_json::json!({
+            "mediaType": "movie",
+            "mediaId": tmdb_id,
+        }),
+        "tv" => serde_json::json!({
+            "mediaType": "tv",
+            "mediaId": tmdb_id,
+            "seasons": season,
+        }),
+        _ => {
+            return Err(JellyseerrError::Other(format!(
+                "Invalid media type: {}",
+                media_type
+            )));
+        }
+    };
+    debug!("Sending request to Jellyseerr: {:?}", body);
 
     let response = client
         .post(url)
