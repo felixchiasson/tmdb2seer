@@ -1847,6 +1847,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "tmdb2seer"
+version = "0.2.0"
+dependencies = [
+ "askama",
+ "axum",
+ "base64 0.22.1",
+ "chrono",
+ "config",
+ "cors",
+ "http 1.2.0",
+ "hyper 0.14.32",
+ "rand",
+ "reqwest",
+ "secrecy",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tokio",
+ "tower 0.4.13",
+ "tower-http",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "tokio"
 version = "1.43.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2070,31 +2095,6 @@ name = "try-lock"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
-
-[[package]]
-name = "tvdb_ratings"
-version = "0.1.0"
-dependencies = [
- "askama",
- "axum",
- "base64 0.22.1",
- "chrono",
- "config",
- "cors",
- "http 1.2.0",
- "hyper 0.14.32",
- "rand",
- "reqwest",
- "secrecy",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
- "tokio",
- "tower 0.4.13",
- "tower-http",
- "tracing",
- "tracing-subscriber",
-]
 
 [[package]]
 name = "typenum"

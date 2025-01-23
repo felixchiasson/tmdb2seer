@@ -1,17 +1,17 @@
 use std::sync::Arc;
+use tmdb2seer::{init_config, init_router, AppResult};
 use tracing::Level;
 use tracing::{error, info};
-use tvdb_ratings::{init_config, init_router, AppResult};
 
 #[tokio::main]
 async fn main() -> AppResult<()> {
-    let settings = tvdb_ratings::config::settings::Settings::new()
+    let settings = tmdb2seer::config::settings::Settings::new()
         .map_err(|e| {
             error!("Failed to load settings: {}", e);
-            tvdb_ratings::AppError::Config(e.to_string())
+            tmdb2seer::AppError::Config(e.to_string())
         })?
         .validate()
-        .map_err(tvdb_ratings::AppError::Config)?;
+        .map_err(tmdb2seer::AppError::Config)?;
 
     let level = if settings.is_development() {
         Level::DEBUG
@@ -32,7 +32,7 @@ async fn main() -> AppResult<()> {
             .parse::<std::net::IpAddr>()
             .map_err(|e| {
                 error!("Failed to parse host address: {}", e);
-                tvdb_ratings::AppError::Config(format!("Invalid host address: {}", e))
+                tmdb2seer::AppError::Config(format!("Invalid host address: {}", e))
             })?,
         settings.server.port,
     ));
@@ -51,7 +51,7 @@ async fn main() -> AppResult<()> {
     axum::serve(
         tokio::net::TcpListener::bind(addr).await.map_err(|e| {
             error!("Failed to bind to address: {}", e);
-            tvdb_ratings::AppError::Internal(e.to_string())
+            tmdb2seer::AppError::Internal(e.to_string())
         })?,
         app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
     )
