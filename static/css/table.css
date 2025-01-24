@@ -1,7 +1,7 @@
 /* Release Container */
 #releases-container {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
     gap: 1rem;
     padding: 1rem 0;
 }
@@ -20,16 +20,21 @@
 .release-card {
     background: #fff;
     border-radius: 8px;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
     overflow: hidden;
     transition:
         transform 0.3s ease,
         box-shadow 0.3s ease;
-    max-width: 300px;
+    max-width: 250px;
+    width: 250px;
     margin: 0 auto;
     position: relative; /* For overlay positioning */
     animation: fadeInUp 1s ease forwards;
     opacity: 0;
+    border: 3px solid;
 }
 
 .release-card:hover {
@@ -37,12 +42,20 @@
     box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
 }
 
+.content {
+    flex: 1;
+}
+.image-wrapper {
+    flex-shrink: 0;
+    position: relative;
+}
+
 /* Card Image */
 .release-card img {
     width: 100%;
     height: 300px;
     object-fit: cover;
-    border-bottom: 1px solid #eee;
+    border-bottom: none;
     display: block;
     transition: transform 0.3s ease;
 }
@@ -91,6 +104,11 @@
 /* Card Info Section */
 .release-info {
     padding: 0.8rem;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 180px;
+    flex: 1;
 }
 
 .release-info h3 {
@@ -152,26 +170,33 @@
     height: 200%;
 }
 
+.release-info .content {
+    flex-grow: 1;
+}
+
 /* Responsive adjustments */
 @media (max-width: 768px) {
     #releases-container {
-        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 1.5rem;
+    }
+
+    .release-card {
+        width: 100%;
+        max-width: 400px; /* Allow cards to be wider on mobile but not too wide */
     }
 
     .release-card img,
     .tmdb-overlay {
-        height: 225px;
+        height: 500px; /* Make images taller on mobile for better visibility */
     }
 }
 
 @media (max-width: 480px) {
     #releases-container {
-        grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-    }
-
-    .release-card img,
-    .tmdb-overlay {
-        height: 200px;
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
     }
 
     .release-info {
@@ -181,7 +206,7 @@
 .button-group {
     display: flex;
     gap: 0.5rem;
-    margin-top: 0.8rem;
+    margin-top: auto;
 }
 
 .button-group button {
@@ -229,4 +254,49 @@
 .season-select:focus {
     outline: none;
     border-color: #4caf50;
+}
+
+/* Rating overlay */
+.rating-overlay {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: rgba(0, 0, 0, 0.8);
+    padding: 8px 12px;
+    border-radius: 4px;
+    z-index: 3;
+    font-size: 1.2rem;
+    font-weight: bold;
+    color: white;
+}
+
+/* Rating colors */
+.rating-high {
+    border-color: rgba(76, 175, 80, 0.5);
+}
+.rating-high .rating-overlay {
+    background-color: #4caf50;
+}
+.rating-high:hover {
+    border-color: #4caf50;
+}
+
+.rating-medium {
+    border-color: rgba(255, 193, 7, 0.5);
+}
+.rating-medium:hover {
+    border-color: #ffc107;
+}
+.rating-medium .rating-overlay {
+    background-color: #ffc107;
+}
+
+.rating-low {
+    border-color: rgba(244, 67, 54, 0.5);
+}
+.rating-low:hover {
+    border-color: #f44336;
+}
+.rating-low .rating-overlay {
+    background-color: #f44336;
 }
