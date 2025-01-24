@@ -12,6 +12,7 @@ pub mod config {
 pub mod security {
     pub mod csrf;
     pub mod deserialize;
+    pub mod headers;
 }
 use crate::api::tmdb::Release;
 use crate::config::settings::Settings;
@@ -20,7 +21,9 @@ use secrecy::Secret;
 use serde_json;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use tower::util::MapResponseLayer;
 use tower_http::services::ServeDir;
+use tower_http::trace::TraceLayer;
 
 #[derive(Clone)]
 pub struct AppConfig {
@@ -89,6 +92,7 @@ pub fn init_config() -> AppResult<AppConfig> {
 
 pub fn init_router(state: AppState) -> axum::Router {
     use crate::api::{handlers, middleware::RateLimitServiceLayer};
+    use crate::security::headers::SecurityHeadersLayer;
     use axum::{
         routing::{get, post},
         Router,
@@ -102,16 +106,18 @@ pub fn init_router(state: AppState) -> axum::Router {
             "/request/{media_type}/{id}",
             post(handlers::add_to_jellyseerr),
         )
-        .route("/hide/{media_type}/{id}", post(handlers::hide_media))
-        .layer(RateLimitServiceLayer::new(
-            state.config.rate_limit.requests_per_second,
-            state.config.rate_limit.burst_size,
-        ));
+        .route("/hide/{media_type}/{id}", post(handlers::hide_media));
 
     Router::new()
         .route("/", get(handlers::index))
         .nest("/api", api_router)
         .nest_service("/static", static_service)
+        .layer(SecurityHeadersLayer::new())
+        .layer(RateLimitServiceLayer::new(
+            state.config.rate_limit.requests_per_second,
+            state.config.rate_limit.burst_size,
+        ))
+        .layer(TraceLayer::new_for_http())
         .with_state(state)
 }
 
