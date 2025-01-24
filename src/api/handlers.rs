@@ -127,18 +127,20 @@ pub async fn refresh(headers: HeaderMap, State(state): State<AppState>) -> impl 
         Ok(new_releases) => {
             match jellyseerr::filter_requested_media(&state.config, new_releases).await {
                 Ok(filtered_releases) => {
+                    let response = Json(json!({
+                        "success": true,
+                        "releases": &filtered_releases,
+                        "lastUpdate": Utc::now().to_rfc3339(),
+                    }))
+                    .into_response();
+
                     let mut releases = state.releases.write().await;
-                    *releases = filtered_releases.clone();
+                    *releases = filtered_releases;
                     let mut last_update = state.last_update.write().await;
                     *last_update = Utc::now();
 
                     info!("Manual refresh successful");
-                    Json(json!({
-                        "success": true,
-                        "releases": filtered_releases,
-                        "lastUpdate": Utc::now().to_rfc3339(),
-                    }))
-                    .into_response()
+                    response
                 }
                 Err(e) => {
                     error!("Failed to filter requested media: {}", e);
