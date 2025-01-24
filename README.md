@@ -22,7 +22,7 @@ requests_per_second = 10
 burst_size = 20
 ```
 
-Then you can run the binary with `cargo run --release` or `cargo build --release && ./target/release/tvdb_ratings`.
+Then you can run the binary with `cargo run --release` or `cargo build --release && ./target/release/tmdb2seer`.
 
 You can override the default settings with environment variables prefixed with APP_:
 ```
