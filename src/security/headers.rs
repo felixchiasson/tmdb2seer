@@ -55,7 +55,7 @@ where
                 HeaderValue::from_static("nosniff"),
             );
 
-            headers.insert("X-Frame-Options", HeaderValue::from_static("DENY"));
+            headers.insert("X-Frame-Options", HeaderValue::from_static("SAMEORIGIN"));
 
             headers.insert(
                 "X-XSS-Protection",
@@ -66,10 +66,10 @@ where
                 "Content-Security-Policy",
                 HeaderValue::from_static(
                     "default-src 'self'; \
-                     script-src 'self'; \
-                     style-src 'self'; \
-                     img-src 'self' https://image.tmdb.org; \
-                     connect-src 'self'",
+                     script-src 'self' 'unsafe-inline'; \
+                     style-src 'self' 'unsafe-inline'; \
+                     img-src 'self' https://image.tmdb.org https:; \
+                     connect-src 'self' https:;",
                 ),
             );
 
