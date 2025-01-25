@@ -6,6 +6,7 @@ class App {
   constructor() {
     this.setupEventListeners();
     this.initializeReleases();
+    this.formatInitialDate();
   }
 
   setupEventListeners() {
@@ -14,6 +15,16 @@ class App {
       this.initializeCards();
       this.setupReleaseCards();
     });
+  }
+
+  formatInitialDate() {
+    const lastUpdateEl = document.getElementById("lastUpdate");
+    if (lastUpdateEl) {
+      const currentText = lastUpdateEl.textContent;
+      const dateString = currentText.replace("Last updated: ", "");
+      const date = new Date(dateString);
+      lastUpdateEl.textContent = `Last updated: ${date.toLocaleString()}`;
+    }
   }
 
   initializeCards() {
@@ -68,7 +79,7 @@ class App {
           (release) => !ReleaseManager.isHidden(release.media_type, release.id),
         );
 
-        lastUpdateEl.textContent = `Last updated: ${new Date(data.lastUpdate).toUTCString()}`;
+        lastUpdateEl.textContent = `Last updated: ${new Date(data.lastUpdate).toLocaleString()}`;
         releasesContainer.innerHTML = visibleReleases
           .map((release) => ReleaseManager.createReleaseCard(release))
           .join("");
