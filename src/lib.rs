@@ -106,17 +106,17 @@ pub fn init_router(state: AppState) -> axum::Router {
             "/request/{media_type}/{id}",
             post(handlers::add_to_jellyseerr),
         )
-        .route("/hide/{media_type}/{id}", post(handlers::hide_media));
+        .route("/hide/{media_type}/{id}", post(handlers::hide_media))
+        .layer(RateLimitServiceLayer::new(
+            state.config.rate_limit.requests_per_second,
+            state.config.rate_limit.burst_size,
+        ));
 
     Router::new()
         .route("/", get(handlers::index))
         .nest("/api", api_router)
         .nest_service("/static", static_service)
         .layer(SecurityHeadersLayer::new())
-        .layer(RateLimitServiceLayer::new(
-            state.config.rate_limit.requests_per_second,
-            state.config.rate_limit.burst_size,
-        ))
         .layer(TraceLayer::new_for_http())
         .with_state(state)
 }
