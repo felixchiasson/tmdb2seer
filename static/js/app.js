@@ -22,8 +22,24 @@ class App {
     if (lastUpdateEl) {
       const currentText = lastUpdateEl.textContent;
       const dateString = currentText.replace("Last updated: ", "");
-      const date = new Date(dateString);
-      lastUpdateEl.textContent = `Last updated: ${date.toLocaleString()}`;
+      try {
+        // First try to create a date object directly
+        let date = new Date(dateString);
+
+        // If the date is invalid (returns NaN), try cleaning the timestamp
+        if (isNaN(date.getTime())) {
+          // Remove microseconds and ensure UTC format
+          const cleanDateString = dateString.split(".")[0] + "Z";
+          date = new Date(cleanDateString);
+        }
+
+        // If we have a valid date, format it
+        if (!isNaN(date.getTime())) {
+          lastUpdateEl.textContent = `Last updated: ${date.toLocaleString()}`;
+        }
+      } catch (error) {
+        console.error("Error formatting date:", error);
+      }
     }
   }
 
