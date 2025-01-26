@@ -98,13 +98,7 @@ pub fn init_router(state: AppState) -> axum::Router {
         Router,
     };
 
-    let static_dir = if cfg!(debug_assertions) {
-        "static"
-    } else {
-        "dist/static"
-    };
-
-    let static_service = ServeDir::new(static_dir);
+    let static_service = ServeDir::new("static");
 
     let api_router = Router::new()
         .route("/refresh", post(handlers::refresh))
@@ -136,6 +130,14 @@ pub fn init_static_files() -> axum::Router {
     };
 
     Router::new().nest_service("/static", ServeDir::new(static_dir))
+}
+
+pub fn get_template_path() -> String {
+    if cfg!(debug_assertions) {
+        "templates".to_string()
+    } else {
+        "dist/templates".to_string()
+    }
 }
 
 pub fn json_encode<T: serde::Serialize>(value: &T) -> askama::Result<String> {
