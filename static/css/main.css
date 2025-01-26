@@ -1,50 +1,20 @@
-/* Reset and base styles */
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-}
+/* Base */
+@import "base/_variables.css";
+@import "base/_reset.css";
+@import "base/_typography.css";
 
-body {
-    font-family: Arial, sans-serif;
-    line-height: 1.6;
-    color: #333;
-}
+/* Utils */
+@import "utils/_animations.css";
+@import "utils/_media-queries.css";
 
-.container {
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 1rem;
-}
+/* Layout */
+@import "layout/_container.css";
+@import "layout/_grid.css";
 
-/* Common components */
-.notification {
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    padding: 1rem;
-    border-radius: 4px;
-    color: white;
-    animation: slideIn 0.3s ease-out;
-}
-
-.notification.success {
-    background-color: #4caf50;
-}
-.notification.error {
-    background-color: #f44336;
-}
-.notification.info {
-    background-color: #2196f3;
-}
-
-@keyframes slideIn {
-    from {
-        transform: translateX(100%);
-        opacity: 0;
-    }
-    to {
-        transform: translateX(0);
-        opacity: 1;
-    }
-}
+/* Components */
+@import "components/_buttons.css";
+@import "components/_cards.css";
+@import "components/_notifications.css";
+@import "components/_ratings.css";
+@import "components/_refresh.css";
+@import "components/_season-selector.css";

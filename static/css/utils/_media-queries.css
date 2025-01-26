@@ -1,0 +1,24 @@
+@media (max-width: 768px) {
+    #releases-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: var(--spacing-xl);
+    }
+
+    .release-card {
+        width: 100%;
+        max-width: 400px;
+    }
+
+    .release-card img,
+    .tmdb-overlay {
+        height: 500px;
+    }
+}
+
+@media (max-width: 480px) {
+    .release-info {
+        padding: var(--spacing-sm);
+    }
+}

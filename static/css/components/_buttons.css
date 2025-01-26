@@ -1,0 +1,37 @@
+.button-group {
+    display: flex;
+    gap: var(--spacing-xs);
+    margin-top: auto;
+}
+
+.button-group button {
+    flex: 1;
+    padding: var(--spacing-sm);
+    border-radius: var(--border-radius);
+    font-size: var(--font-size-normal);
+    transition: background-color var(--transition-standard);
+}
+
+.request-button {
+    background-color: var(--color-primary);
+    color: var(--color-white);
+}
+
+.request-button:hover {
+    background-color: var(--color-primary-dark);
+}
+
+.hide-button {
+    background-color: var(--color-danger);
+    color: var(--color-white);
+}
+
+.hide-button:hover {
+    background-color: var(--color-danger-dark);
+}
+
+.request-button:disabled,
+.hide-button:disabled {
+    background-color: #cccccc;
+    cursor: not-allowed;
+}
