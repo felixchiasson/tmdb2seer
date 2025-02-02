@@ -13,7 +13,6 @@ class App {
     document.addEventListener("DOMContentLoaded", () => {
       this.setupRefreshButton();
       this.initializeCards();
-      this.setupReleaseCards();
     });
   }
 
