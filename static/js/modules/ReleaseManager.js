@@ -62,8 +62,10 @@ export class ReleaseManager {
                     <div class="content">
                         <h3>${release.title}</h3>
                         <p>Release Date: ${release.release_date}</p>
-                        <p>Type: ${release.media_type}</p>
-                        <p>Votes: ${release.vote_count}</p>
+                        <div class="description-container">
+                                            <p class="description-text">${release.overview || "No description available."}</p>
+                                            <button class="description-toggle">Show More</button>
+                                        </div>
                         ${
                           release.media_type === "tv" &&
                           release.number_of_seasons
@@ -93,5 +95,24 @@ export class ReleaseManager {
                 </div>
             </div>
         `;
+  }
+
+  static setupDescriptionToggles() {
+    document.querySelectorAll(".description-container").forEach((container) => {
+      const text = container.querySelector(".description-text");
+      const toggle = container.querySelector(".description-toggle");
+
+      if (text.scrollHeight > text.clientHeight) {
+        toggle.style.display = "block";
+
+        toggle.addEventListener("click", () => {
+          const isExpanded = container.classList.contains("expanded");
+          container.classList.toggle("expanded");
+          toggle.textContent = isExpanded ? "Show More" : "Show Less";
+        });
+      } else {
+        toggle.style.display = "none";
+      }
+    });
   }
 }

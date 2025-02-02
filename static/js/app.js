@@ -70,6 +70,7 @@ class App {
       console.error("Failed to initialize cards:", error);
       NotificationManager.show("Failed to initialize cards", "error");
     }
+    ReleaseManager.setupDescriptionToggles();
   }
 
   setupRefreshButton() {

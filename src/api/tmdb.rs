@@ -6,18 +6,19 @@ use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 use tracing::{debug, error};
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct TMDBResult {
     pub id: i32,
     pub title: Option<String>,
     pub name: Option<String>,
     pub release_date: Option<String>,
     pub first_air_date: Option<String>,
-    #[serde(rename = "media_type")]
+    #[serde(skip)]
     pub media_type: String,
     pub vote_average: f32,
     pub vote_count: i32,
     pub poster_path: Option<String>,
+    pub overview: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -66,6 +67,7 @@ pub struct Release {
     pub poster_url: String,
     pub tmdb_url: String,
     pub number_of_seasons: Option<i32>,
+    pub overview: Option<String>,
 }
 
 static TV_CACHE: OnceLock<DashMap<i32, CachedTVDetails>> = OnceLock::new();
@@ -73,76 +75,83 @@ const CACHE_TTL: Duration = Duration::from_secs(24 * 60 * 60);
 
 pub async fn fetch_latest_releases(api_key: &Secret<String>) -> Result<Vec<Release>, TMDBError> {
     let client = reqwest::Client::new();
-    let url = format!(
-        "https://api.themoviedb.org/3/trending/all/week?api_key={}",
+    let mut all_releases = Vec::new();
+
+    // Fetch movies
+    let movie_url = format!(
+        "https://api.themoviedb.org/3/discover/movie?api_key={}&language=en-US&sort_by=release_date.desc&with_watch_providers=8|9|337|1899|350|15|619|283&watch_region=US&vote_count.gte=1&vote_average.gte=1&page=1",
         api_key.expose_secret()
     );
 
-    debug!(
-        "Requesting URL: {}",
-        url.replace(api_key.expose_secret(), "API_KEY")
-    );
-
-    let response = client
-        .get(&url)
+    let movie_response = client
+        .get(&movie_url)
         .header("accept", "application/json")
         .send()
         .await
         .map_err(TMDBError::Request)?;
 
-    let status = response.status();
-    debug!("TMDB response status: {}", status);
+    let movie_text = movie_response.text().await.map_err(TMDBError::Request)?;
+    let movie_data: TMDBResponse = serde_json::from_str(&movie_text).map_err(TMDBError::Parse)?;
 
-    let text = response.text().await.map_err(TMDBError::Request)?;
-    let response: TMDBResponse = serde_json::from_str(&text).map_err(TMDBError::Parse)?;
+    // Process movies
+    for item in movie_data.results {
+        let poster_url = item
+            .poster_path
+            .map(|path| format!("https://image.tmdb.org/t/p/w500{}", path))
+            .unwrap_or_else(|| String::from("https://via.placeholder.com/500x750"));
 
-    debug!(
-        "Successfully fetched {} TMDB results",
-        response.results.len()
-    );
+        let tmdb_url = format!("https://www.themoviedb.org/movie/{}", item.id);
 
-    let mut tv_detail_futures = Vec::new();
-    let mut releases = Vec::new();
-
-    for item in response.results {
-        if item.media_type == "tv" {
-            let api_key_clone = api_key.clone();
-            let tv_future = tokio::spawn(async move {
-                let details = fetch_tv_details(&api_key_clone, item.id).await;
-                (item, details)
-            });
-            tv_detail_futures.push(tv_future);
-        } else {
-            // For movies, create the release directly
-            let poster_url = item
-                .poster_path
-                .map(|path| format!("https://image.tmdb.org/t/p/w500{}", path))
-                .unwrap_or_else(|| String::from("https://via.placeholder.com/500x750"));
-
-            let tmdb_url = format!("https://www.themoviedb.org/movie/{}", item.id);
-
-            releases.push(Release {
-                id: item.id,
-                title: item.title.unwrap_or_default(),
-                release_date: item.release_date.unwrap_or_default(),
-                media_type: item.media_type,
-                vote_count: item.vote_count,
-                vote_average: item.vote_average,
-                poster_url,
-                tmdb_url,
-                number_of_seasons: None,
-            });
-        }
+        all_releases.push(Release {
+            id: item.id,
+            title: item.title.unwrap_or_default(),
+            release_date: item.release_date.unwrap_or_default(),
+            media_type: "movie".to_string(),
+            vote_count: item.vote_count,
+            vote_average: item.vote_average,
+            poster_url,
+            tmdb_url,
+            number_of_seasons: None,
+            overview: item.overview,
+        });
     }
 
-    // Wait for all TV show detail requests to complete
-    for tv_future in tv_detail_futures {
-        match tv_future.await {
-            Ok((item, details_result)) => {
+    // Fetch TV shows
+    let tv_url = format!(
+        "https://api.themoviedb.org/3/discover/tv?api_key={}&language=en-US&sort_by=first_air_date.desc&with_watch_providers=8|9|337|1899|350|15|619|283&watch_region=US&with_watch_monetization_types=flatrate&vote_count.gte=1&vote_average.gte=1&page=1",
+        api_key.expose_secret()
+    );
+
+    let tv_response = client
+        .get(&tv_url)
+        .header("accept", "application/json")
+        .send()
+        .await
+        .map_err(TMDBError::Request)?;
+
+    let tv_text = tv_response.text().await.map_err(TMDBError::Request)?;
+    let tv_data: TMDBResponse = serde_json::from_str(&tv_text).map_err(TMDBError::Parse)?;
+
+    // Create futures for both TV details and providers
+    let mut tv_futures = Vec::new();
+    for item in &tv_data.results {
+        let api_key = api_key.clone();
+        let id = item.id;
+        let tv_future = tokio::spawn(async move {
+            let details = fetch_tv_details(&api_key, id).await;
+            (id, details)
+        });
+        tv_futures.push((id, item.clone(), tv_future));
+    }
+
+    // Process TV shows
+    for (id, item, future) in tv_futures {
+        match future.await {
+            Ok((_, details_result)) => {
                 let number_of_seasons = match details_result {
                     Ok(details) => Some(details.number_of_seasons),
                     Err(e) => {
-                        error!("Failed to fetch TV details for {}: {}", item.id, e);
+                        error!("Failed to fetch TV details for {}: {}", id, e);
                         None
                     }
                 };
@@ -154,25 +163,29 @@ pub async fn fetch_latest_releases(api_key: &Secret<String>) -> Result<Vec<Relea
 
                 let tmdb_url = format!("https://www.themoviedb.org/tv/{}", item.id);
 
-                releases.push(Release {
+                all_releases.push(Release {
                     id: item.id,
                     title: item.name.unwrap_or_default(),
                     release_date: item.first_air_date.unwrap_or_default(),
-                    media_type: item.media_type,
+                    media_type: "tv".to_string(),
                     vote_count: item.vote_count,
                     vote_average: item.vote_average,
                     poster_url,
                     tmdb_url,
                     number_of_seasons,
+                    overview: item.overview,
                 });
             }
             Err(e) => {
-                error!("Failed to join TV details future: {}", e);
+                error!("Failed to join TV future: {}", e);
             }
         }
     }
 
-    Ok(releases)
+    // Sort all releases by release date (newest first)
+    all_releases.sort_by(|a, b| b.release_date.cmp(&a.release_date));
+    debug!("Final releases with providers: {:#?}", all_releases);
+    Ok(all_releases)
 }
 
 pub async fn fetch_tv_details(

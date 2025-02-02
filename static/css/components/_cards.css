@@ -89,3 +89,41 @@
 .content {
     flex: 1;
 }
+
+.description-container {
+    position: relative;
+    margin: var(--spacing-sm) 0;
+}
+
+.description-text {
+    font-size: var(--font-size-small);
+    line-height: 1.4;
+    max-height: 4.2em; /* Show 3 lines of text */
+    overflow: hidden;
+    transition: max-height var(--transition-standard);
+}
+
+.description-container:not(.expanded) .description-text {
+    -webkit-line-clamp: 3;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.description-container.expanded .description-text {
+    max-height: none;
+}
+
+.description-toggle {
+    color: var(--color-primary);
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: var(--font-size-small);
+    cursor: pointer;
+    margin-top: var(--spacing-xs);
+}
+
+.description-toggle:hover {
+    text-decoration: underline;
+}
