@@ -117,8 +117,7 @@ async fn update_release_list(headers: HeaderMap, state: &AppState) -> Result<Res
 
     info!("Manual refresh triggered");
 
-    let new_releases =
-        tmdb::fetch_latest_releases(&state.config.tmdb_api_key, &state.config.omdb_api_key).await?;
+    let new_releases = tmdb::fetch_latest_releases(&state.config).await?;
 
     let filtered_releases = jellyseerr::filter_requested_media(&state.config, new_releases).await?;
 

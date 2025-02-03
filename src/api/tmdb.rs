@@ -1,7 +1,7 @@
 use crate::api::client::ApiClient;
 use crate::api::omdb;
+use crate::AppConfig;
 use crate::Result;
-use secrecy::Secret;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use tracing::{debug, error};
@@ -67,18 +67,15 @@ pub struct Release {
     pub rotten_tomatoes: Option<String>,
 }
 
-pub async fn fetch_latest_releases(
-    api_key: &Secret<String>,
-    omdb_api_key: &Secret<String>,
-) -> Result<Vec<Release>> {
-    let client = ApiClient::new();
+pub async fn fetch_latest_releases(config: &AppConfig) -> Result<Vec<Release>> {
+    let client = ApiClient::new(&config);
     let mut all_releases = Vec::new();
 
     // Fetch movies
     let movie_data: TMDBResponse = client
             .tmdb_get(
                 "discover/movie?sort_by=release_date.desc&with_watch_providers=8|9|337|1899|350|15|619|283&watch_region=US&vote_count.gte=1&vote_average.gte=1&page=1",
-                api_key,
+                &config.tmdb_api_key,
             )
             .await?;
 
@@ -102,7 +99,7 @@ pub async fn fetch_latest_releases(
         let mut rotten_tomatoes = None;
 
         if let Some(title) = &item.title {
-            if let Ok(omdb_data) = omdb::fetch_ratings(omdb_api_key, title, year).await {
+            if let Ok(omdb_data) = omdb::fetch_ratings(&config, title, year).await {
                 imdb_rating = omdb_data.imdb_rating;
                 metascore = omdb_data.metascore;
 
@@ -138,17 +135,17 @@ pub async fn fetch_latest_releases(
     let tv_data: TMDBResponse = client
             .tmdb_get(
                 "discover/tv?sort_by=first_air_date.desc&with_watch_providers=8|9|337|1899|350|15|619|283&watch_region=US&with_watch_monetization_types=flatrate&vote_count.gte=1&vote_average.gte=1&page=1",
-                api_key,
+                &config.tmdb_api_key,
             )
             .await?;
 
     // Create futures for both TV details and providers
     let mut tv_futures = Vec::new();
     for item in &tv_data.results {
-        let api_key = api_key.clone();
+        let config_tv = config.clone();
         let id = item.id;
         let tv_future = tokio::spawn(async move {
-            let details = fetch_tv_details(&api_key, id).await;
+            let details = fetch_tv_details(&config_tv, id).await;
             (id, details)
         });
         tv_futures.push((id, item.clone(), tv_future));
@@ -201,7 +198,7 @@ pub async fn fetch_latest_releases(
     Ok(all_releases)
 }
 
-pub async fn fetch_tv_details(api_key: &Secret<String>, tv_id: i32) -> Result<TVShowDetails> {
+pub async fn fetch_tv_details(config: &AppConfig, tv_id: i32) -> Result<TVShowDetails> {
     if let Some(cached) = crate::api::cache::get_cached_tv_details(tv_id) {
         debug!("Cache hit for TV details: {}", tv_id);
         return Ok(cached);
@@ -209,8 +206,10 @@ pub async fn fetch_tv_details(api_key: &Secret<String>, tv_id: i32) -> Result<TV
 
     debug!("Cache miss for TV show {}, fetching from API", tv_id);
 
-    let client = ApiClient::new();
-    let details: TVShowDetails = client.tmdb_get(&format!("tv/{}", tv_id), api_key).await?;
+    let client = ApiClient::new(&config);
+    let details: TVShowDetails = client
+        .tmdb_get(&format!("tv/{}", tv_id), &config.tmdb_api_key)
+        .await?;
 
     crate::api::cache::cache_tv_details(tv_id, details.clone());
 

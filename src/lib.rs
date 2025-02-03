@@ -19,11 +19,12 @@ pub mod security {
 }
 
 mod error;
+pub use config::settings::RetryConfig;
 pub use error::{Error, Result};
 
-use crate::api::tmdb::Release;
-use crate::config::settings::Settings;
+pub use api::tmdb::Release;
 use chrono::{DateTime, Utc};
+pub use config::settings::Settings;
 use secrecy::Secret;
 use serde_json;
 use std::sync::Arc;
@@ -38,6 +39,7 @@ pub struct AppConfig {
     pub jellyseerr_url: String,
     pub rate_limit: RateLimitConfig,
     pub omdb_api_key: Secret<String>,
+    pub retry: RetryConfig,
 }
 
 #[derive(Clone)]
@@ -78,6 +80,7 @@ pub fn init_config() -> Result<AppConfig> {
             burst_size: settings.rate_limit.burst_size,
         },
         omdb_api_key: settings.omdb.api_key,
+        retry: settings.retry,
     })
 }
 

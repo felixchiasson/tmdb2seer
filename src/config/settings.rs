@@ -38,6 +38,23 @@ pub struct OMDBConfig {
     pub api_key: Secret<String>,
 }
 
+#[derive(Debug, Deserialize, Clone)]
+pub struct RetryConfig {
+    pub max_retries: u32,
+    pub initial_delay_ms: u64,
+    pub max_delay_ms: u64,
+}
+
+impl Default for RetryConfig {
+    fn default() -> Self {
+        Self {
+            max_retries: 3,
+            initial_delay_ms: 500,
+            max_delay_ms: 5000,
+        }
+    }
+}
+
 #[derive(Debug, Deserialize)]
 pub struct Settings {
     pub tmdb: TMDBConfig,
@@ -45,6 +62,7 @@ pub struct Settings {
     pub server: ServerConfig,
     pub rate_limit: RateLimitConfig,
     pub omdb: OMDBConfig,
+    pub retry: RetryConfig,
 }
 
 impl Settings {

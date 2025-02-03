@@ -13,3 +13,11 @@ port = 3000
 [rate_limit]
 requests_per_second = 10
 burst_size = 20
+
+[omdb]
+api_key = "your-default-key-here"
+
+[retry]
+max_retries = 3
+initial_delay_ms = 500
+max_delay_ms = 5000

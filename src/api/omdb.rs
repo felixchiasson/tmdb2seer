@@ -1,6 +1,5 @@
 use crate::api::client::ApiClient;
 use crate::Result;
-use secrecy::Secret;
 use serde::{Deserialize, Serialize};
 use tracing::debug;
 
@@ -62,7 +61,7 @@ impl OMDBResponse {
 }
 
 pub async fn fetch_ratings(
-    api_key: &Secret<String>,
+    config: &crate::AppConfig,
     title: &str,
     year: &str,
 ) -> Result<OMDBResponse> {
@@ -77,11 +76,11 @@ pub async fn fetch_ratings(
         title, year
     );
 
-    let client = ApiClient::new();
+    let client = ApiClient::new(&config);
 
     debug!("Fetching OMDB data for: {} ({})", title, year);
 
-    let data: OMDBResponse = client.omdb_get(title, year, api_key).await?;
+    let data: OMDBResponse = client.omdb_get(title, year, &config.omdb_api_key).await?;
 
     let cleaned_data = OMDBResponse {
         imdb_rating: data.get_imdb_rating(),

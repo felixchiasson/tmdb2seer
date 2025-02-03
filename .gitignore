@@ -3,3 +3,5 @@
 /config/production.toml
 .DS_Store
 /dist
+/cache/
+cache/ratings_cache.json

@@ -32,10 +32,7 @@ async fn main() -> Result<()> {
         api::tasks::refresh_releases(background_state, refresh_interval).await;
     });
 
-    if let Err(e) =
-        api::tmdb::fetch_latest_releases(&state.config.tmdb_api_key, &state.config.omdb_api_key)
-            .await
-    {
+    if let Err(e) = api::tmdb::fetch_latest_releases(&state.config).await {
         error!("Failed initial fetch of latest releases: {}", e);
     }
 

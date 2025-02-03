@@ -51,7 +51,7 @@ pub async fn request_media(
     season: Option<Vec<i32>>,
 ) -> Result<()> {
     debug!("Requesting media: type={}, id={}", media_type, tmdb_id);
-    let client = ApiClient::new();
+    let client = ApiClient::new(&config);
 
     // Create the request body
     let body = match media_type {
@@ -93,7 +93,7 @@ pub async fn filter_requested_media(
     config: &AppConfig,
     releases: Vec<Release>,
 ) -> Result<Vec<Release>> {
-    let client = ApiClient::new();
+    let client = ApiClient::new(&config);
 
     let data: JellyseerrMediaResponse = client
         .jellyseerr_get(
