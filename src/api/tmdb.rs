@@ -1,3 +1,4 @@
+use crate::api::omdb;
 use dashmap::DashMap;
 use secrecy::{ExposeSecret, Secret};
 use serde::{Deserialize, Serialize};
@@ -45,15 +46,9 @@ impl fmt::Display for TMDBError {
     }
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct TVShowDetails {
     pub number_of_seasons: i32,
-}
-
-#[derive(Clone)]
-struct CachedTVDetails {
-    details: TVShowDetails,
-    timestamp: Instant,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -68,12 +63,15 @@ pub struct Release {
     pub tmdb_url: String,
     pub number_of_seasons: Option<i32>,
     pub overview: Option<String>,
+    pub imdb_rating: Option<String>,
+    pub metascore: Option<String>,
+    pub rotten_tomatoes: Option<String>,
 }
 
-static TV_CACHE: OnceLock<DashMap<i32, CachedTVDetails>> = OnceLock::new();
-const CACHE_TTL: Duration = Duration::from_secs(24 * 60 * 60);
-
-pub async fn fetch_latest_releases(api_key: &Secret<String>) -> Result<Vec<Release>, TMDBError> {
+pub async fn fetch_latest_releases(
+    api_key: &Secret<String>,
+    omdb_api_key: &Secret<String>,
+) -> Result<Vec<Release>, TMDBError> {
     let client = reqwest::Client::new();
     let mut all_releases = Vec::new();
 
@@ -102,6 +100,33 @@ pub async fn fetch_latest_releases(api_key: &Secret<String>) -> Result<Vec<Relea
 
         let tmdb_url = format!("https://www.themoviedb.org/movie/{}", item.id);
 
+        let year = item
+            .release_date
+            .as_ref()
+            .and_then(|date| date.split('-').next())
+            .unwrap_or("");
+
+        let mut imdb_rating = None;
+        let mut metascore = None;
+        let mut rotten_tomatoes = None;
+
+        if let Some(title) = &item.title {
+            if let Ok(omdb_data) = omdb::fetch_ratings(omdb_api_key, title, year).await {
+                imdb_rating = omdb_data.imdb_rating;
+                metascore = omdb_data.metascore;
+
+                // Extract Rotten Tomatoes rating
+                if let Some(ratings) = omdb_data.ratings {
+                    for rating in ratings {
+                        if rating.source == "Rotten Tomatoes" {
+                            rotten_tomatoes = Some(rating.value.to_string());
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
         all_releases.push(Release {
             id: item.id,
             title: item.title.unwrap_or_default(),
@@ -113,6 +138,9 @@ pub async fn fetch_latest_releases(api_key: &Secret<String>) -> Result<Vec<Relea
             tmdb_url,
             number_of_seasons: None,
             overview: item.overview,
+            imdb_rating,
+            metascore,
+            rotten_tomatoes,
         });
     }
 
@@ -174,6 +202,9 @@ pub async fn fetch_latest_releases(api_key: &Secret<String>) -> Result<Vec<Relea
                     tmdb_url,
                     number_of_seasons,
                     overview: item.overview,
+                    imdb_rating: None,
+                    metascore: None,
+                    rotten_tomatoes: None,
                 });
             }
             Err(e) => {
@@ -192,15 +223,9 @@ pub async fn fetch_tv_details(
     api_key: &Secret<String>,
     tv_id: i32,
 ) -> Result<TVShowDetails, TMDBError> {
-    let cache = get_cache();
-
-    if let Some(cached) = cache.get(&tv_id) {
-        if cached.timestamp.elapsed() < CACHE_TTL {
-            return Ok(cached.details.clone());
-        }
-    } else {
-        debug!("Cache miss for TV ID {}", tv_id);
-        cache.remove(&tv_id);
+    if let Some(cached) = crate::api::cache::get_cached_tv_details(tv_id) {
+        debug!("Cache hit for TV details: {}", tv_id);
+        return Ok(cached);
     }
 
     debug!("Cache miss for TV show {}, fetching from API", tv_id);
@@ -226,17 +251,7 @@ pub async fn fetch_tv_details(
     let text = response.text().await.map_err(TMDBError::Request)?;
     let details: TVShowDetails = serde_json::from_str(&text).map_err(TMDBError::Parse)?;
 
-    cache.insert(
-        tv_id,
-        CachedTVDetails {
-            details: details.clone(),
-            timestamp: Instant::now(),
-        },
-    );
+    crate::api::cache::cache_tv_details(tv_id, details.clone());
 
     Ok(details)
-}
-
-fn get_cache() -> &'static DashMap<i32, CachedTVDetails> {
-    TV_CACHE.get_or_init(|| DashMap::new())
 }

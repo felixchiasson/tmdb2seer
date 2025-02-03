@@ -127,3 +127,39 @@
 .description-toggle:hover {
     text-decoration: underline;
 }
+
+/* Ratings Container */
+.ratings-container {
+    display: flex;
+    gap: var(--spacing-sm);
+    flex-wrap: wrap;
+    padding: var(--spacing-xs);
+}
+
+.rating {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: var(--font-size-small);
+    padding: 4px 8px;
+    border-radius: var(--border-radius);
+}
+
+.rating-label {
+    font-weight: bold;
+}
+
+.rating.imdb {
+    background-color: #f3ce13;
+    color: black;
+}
+
+.rating.metascore {
+    background-color: #2436c4;
+    color: white;
+}
+
+.rating.rt {
+    background-color: #fa320a;
+    color: white;
+}

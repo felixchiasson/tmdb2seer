@@ -33,11 +33,18 @@ pub struct RateLimitConfig {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct OMDBConfig {
+    #[serde(deserialize_with = "deserialize_secret_string")]
+    pub api_key: Secret<String>,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct Settings {
     pub tmdb: TMDBConfig,
     pub jellyseerr: JellyseerrConfig,
     pub server: ServerConfig,
     pub rate_limit: RateLimitConfig,
+    pub omdb: OMDBConfig,
 }
 
 impl Settings {

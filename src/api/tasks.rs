@@ -13,7 +13,9 @@ pub async fn refresh_releases(state: AppState, refresh_interval: Duration) {
         interval.tick().await;
         info!("Refreshing release");
 
-        match tmdb::fetch_latest_releases(&state.config.tmdb_api_key).await {
+        match tmdb::fetch_latest_releases(&state.config.tmdb_api_key, &state.config.omdb_api_key)
+            .await
+        {
             Ok(new_releases) => {
                 match jellyseerr::filter_requested_media(&state.config, new_releases).await {
                     Ok(filtered_releases) => {

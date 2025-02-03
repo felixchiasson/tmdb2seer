@@ -1,7 +1,9 @@
 pub mod api {
+    pub mod cache;
     pub mod handlers;
     pub mod jellyseerr;
     pub mod middleware;
+    pub mod omdb;
     pub mod rate_limiter;
     pub mod tasks;
     pub mod tmdb;
@@ -14,6 +16,7 @@ pub mod security {
     pub mod deserialize;
     pub mod headers;
 }
+
 use crate::api::tmdb::Release;
 use crate::config::settings::Settings;
 use chrono::{DateTime, Utc};
@@ -31,6 +34,7 @@ pub struct AppConfig {
     pub jellyseerr_api_key: Secret<String>,
     pub jellyseerr_url: String,
     pub rate_limit: RateLimitConfig,
+    pub omdb_api_key: Secret<String>,
 }
 
 #[derive(Clone)]
@@ -52,6 +56,21 @@ pub enum AppError {
 
     #[error("Internal error: {0}")]
     Internal(String),
+
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
+}
+
+impl From<String> for AppError {
+    fn from(err: String) -> Self {
+        AppError::Internal(err)
+    }
+}
+
+impl From<&str> for AppError {
+    fn from(err: &str) -> Self {
+        AppError::Internal(err.to_string())
+    }
 }
 
 #[derive(Clone)]
@@ -87,6 +106,7 @@ pub fn init_config() -> AppResult<AppConfig> {
             requests_per_second: settings.rate_limit.requests_per_second,
             burst_size: settings.rate_limit.burst_size,
         },
+        omdb_api_key: settings.omdb.api_key,
     })
 }
 

@@ -1,6 +1,6 @@
 use std::time::Duration;
 use tmdb2seer::{api, init_config, init_router, AppResult, AppState};
-use tracing::Level;
+use tracing::{debug, Level};
 use tracing::{error, info};
 
 #[tokio::main]
@@ -32,7 +32,10 @@ async fn main() -> AppResult<()> {
         api::tasks::refresh_releases(background_state, refresh_interval).await;
     });
 
-    if let Err(e) = api::tmdb::fetch_latest_releases(&state.config.tmdb_api_key).await {
+    if let Err(e) =
+        api::tmdb::fetch_latest_releases(&state.config.tmdb_api_key, &state.config.omdb_api_key)
+            .await
+    {
         error!("Failed initial fetch of latest releases: {}", e);
     }
 
@@ -61,15 +64,20 @@ async fn main() -> AppResult<()> {
         }
     );
 
-    axum::serve(
-        tokio::net::TcpListener::bind(addr).await.map_err(|e| {
-            error!("Failed to bind to address: {}", e);
-            tmdb2seer::AppError::Internal(e.to_string())
-        })?,
-        app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
-    )
-    .await
-    .unwrap();
+    let save_cache = async {
+        tokio::signal::ctrl_c().await.unwrap();
+        debug!("Saving cache before exit...");
+        crate::api::cache::save_cache();
+        std::process::exit(0);
+    };
+
+    tokio::select! {
+        _ = save_cache => {},
+        _ = axum::serve(
+            tokio::net::TcpListener::bind(addr).await?,
+            app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+        ) => {},
+    }
 
     Ok(())
 }

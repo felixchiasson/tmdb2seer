@@ -41,6 +41,38 @@ export class ReleaseManager {
       seasonOptions += '<option value="all">All Seasons</option>';
     }
 
+    const ratingsHtml = `
+            <div class="ratings-container">
+                ${
+                  release.imdb_rating
+                    ? `<div class="rating imdb">
+                        <span class="rating-label">IMDb:</span>
+                        <span class="rating-value">${release.imdb_rating}</span>
+                    </div>`
+                    : ""
+                }
+                ${
+                  release.metascore
+                    ? `<div class="rating metascore">
+                        <span class="rating-label">Metascore:</span>
+                        <span class="rating-value">${release.metascore}</span>
+                    </div>`
+                    : ""
+                }
+                ${
+                  release.rotten_tomatoes
+                    ? `<div class="rating rt">
+                        <span class="rating-label">RT:</span>
+                        <span class="rating-value">${release.rotten_tomatoes}</span>
+                    </div>`
+                    : ""
+                }
+            </div>`;
+
+    const hasRatings =
+      release.imdb_rating || release.metascore || release.rotten_tomatoes;
+    const ratingsSection = hasRatings ? ratingsHtml : "";
+
     return `
             <div class="release-card ${ratingClass}" data-id="${release.id}">
                 <div class="image-wrapper">
@@ -66,6 +98,7 @@ export class ReleaseManager {
                                             <p class="description-text">${release.overview || "No description available."}</p>
                                             <button class="description-toggle">Show More</button>
                                         </div>
+                        ${ratingsSection}
                         ${
                           release.media_type === "tv" &&
                           release.number_of_seasons

@@ -123,7 +123,8 @@ pub async fn refresh(headers: HeaderMap, State(state): State<AppState>) -> impl 
     }
 
     info!("Manual refresh triggered");
-    match tmdb::fetch_latest_releases(&state.config.tmdb_api_key).await {
+    match tmdb::fetch_latest_releases(&state.config.tmdb_api_key, &state.config.omdb_api_key).await
+    {
         Ok(new_releases) => {
             match jellyseerr::filter_requested_media(&state.config, new_releases).await {
                 Ok(filtered_releases) => {
