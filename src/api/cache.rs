@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
 use std::sync::OnceLock;
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, Instant};
 use tracing::{debug, error};
 
 const MAX_CACHE_SIZE: usize = 1000;
@@ -48,15 +48,6 @@ struct CacheFile {
 pub enum CacheType {
     TVDetails,
     OMDBRatings,
-}
-
-impl CacheType {
-    fn key(&self) -> &'static str {
-        match self {
-            CacheType::TVDetails => "tv_details",
-            CacheType::OMDBRatings => "omdb_ratings",
-        }
-    }
 }
 
 struct CacheManager {

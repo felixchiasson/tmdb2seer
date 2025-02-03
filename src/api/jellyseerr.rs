@@ -12,6 +12,7 @@ struct JellyseerrMediaResponse {
     results: Vec<RequestResult>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct RequestResult {
     #[serde(rename = "type")]

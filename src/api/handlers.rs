@@ -7,7 +7,7 @@ use axum::{
     Json,
 };
 use chrono::{DateTime, Utc};
-use http::{HeaderMap, StatusCode};
+use http::HeaderMap;
 use serde::Deserialize;
 use serde_json::json;
 use tracing::{error, info};

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use tokio::sync::Mutex;
 use tracing::{debug, trace};
 
@@ -64,19 +64,6 @@ impl RateLimiter {
                 key, bucket.tokens
             );
             false
-        }
-    }
-}
-
-impl TokenBucket {
-    // We will use this later when I get to making the table pretty
-    fn time_until_next_token(&self, rate: f64) -> Duration {
-        if self.tokens >= 1.0 {
-            Duration::from_secs(0)
-        } else {
-            let tokens_needed = 1.0 - self.tokens;
-            let seconds_needed = tokens_needed / rate;
-            Duration::from_secs_f64(seconds_needed)
         }
     }
 }
