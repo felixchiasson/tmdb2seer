@@ -25,6 +25,15 @@ pub enum Error {
 
     #[error("CSRF error: {0}")]
     CSRF(String),
+
+    #[error("Request error: {0}")]
+    Request(String),
+
+    #[error("Parse error: {0}")]
+    Parse(String),
+
+    #[error("API error: {0}")]
+    Api(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

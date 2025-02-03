@@ -1,5 +1,6 @@
+use crate::api::client::ApiClient;
 use crate::Result;
-use secrecy::{ExposeSecret, Secret};
+use secrecy::Secret;
 use serde::{Deserialize, Serialize};
 use tracing::debug;
 
@@ -76,21 +77,11 @@ pub async fn fetch_ratings(
         title, year
     );
 
-    let client = reqwest::Client::new();
-    let url = format!(
-        "http://www.omdbapi.com/?apikey={}&t={}&y={}",
-        api_key.expose_secret(),
-        urlencoding::encode(title),
-        year
-    );
+    let client = ApiClient::new();
 
     debug!("Fetching OMDB data for: {} ({})", title, year);
 
-    let response = client.get(url).send().await.map_err(OMDBError::Request)?;
-
-    let response_text = response.text().await.map_err(OMDBError::Request)?;
-
-    let data: OMDBResponse = serde_json::from_str(&response_text).map_err(OMDBError::Parse)?;
+    let data: OMDBResponse = client.omdb_get(title, year, api_key).await?;
 
     let cleaned_data = OMDBResponse {
         imdb_rating: data.get_imdb_rating(),

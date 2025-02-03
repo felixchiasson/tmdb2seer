@@ -1,5 +1,6 @@
 pub mod api {
     pub mod cache;
+    pub mod client;
     pub mod handlers;
     pub mod jellyseerr;
     pub mod middleware;

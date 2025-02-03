@@ -1,11 +1,10 @@
+use crate::api::client::ApiClient;
 use crate::api::tmdb::Release;
-use crate::AppConfig;
-use crate::Result;
+use crate::{AppConfig, Result};
 use reqwest;
-use secrecy::ExposeSecret;
 use serde::Deserialize;
 use std::fmt;
-use tracing::{debug, error, info};
+use tracing::{debug, info};
 
 #[derive(Debug, Deserialize)]
 struct JellyseerrMediaResponse {
@@ -52,10 +51,7 @@ pub async fn request_media(
     season: Option<Vec<i32>>,
 ) -> Result<()> {
     debug!("Requesting media: type={}, id={}", media_type, tmdb_id);
-    let client = reqwest::Client::new();
-
-    // Jellyseerr API endpoint for requesting media
-    let url = format!("{}/api/v1/request", &config.jellyseerr_url);
+    let client = ApiClient::new();
 
     // Create the request body
     let body = match media_type {
@@ -76,32 +72,14 @@ pub async fn request_media(
     };
     debug!("Sending request to Jellyseerr: {:?}", body);
 
-    let response = client
-        .post(url)
-        .header("accept", "application/json")
-        .header(
-            "X-Api-Key",
-            &config.jellyseerr_api_key.expose_secret().to_string(),
+    let _: () = client
+        .jellyseerr_post(
+            "request",
+            &body,
+            &config.jellyseerr_api_key,
+            &config.jellyseerr_url,
         )
-        .json(&body)
-        .send()
-        .await
-        .map_err(|e| JellyseerrError::Request(e))?;
-
-    let status = response.status();
-    if !status.is_success() {
-        let error_text = response
-            .text()
-            .await
-            .unwrap_or_else(|_| "Unknown error".to_string());
-        error!(
-            "Jellyseerr request failed: Status={}, Body={}",
-            status, error_text
-        );
-        return Err(
-            JellyseerrError::Other(format!("Request failed: {} - {}", status, error_text)).into(),
-        );
-    }
+        .await?;
 
     info!(
         "Successfully requested media: type={}, id={}",
@@ -115,33 +93,15 @@ pub async fn filter_requested_media(
     config: &AppConfig,
     releases: Vec<Release>,
 ) -> Result<Vec<Release>> {
-    let client = reqwest::Client::new();
+    let client = ApiClient::new();
 
-    let url = format!("{}/api/v1/request?take=50", &config.jellyseerr_url);
-
-    let response = client
-        .get(&url)
-        .header("accept", "application/json")
-        .header(
-            "X-Api-Key",
-            config.jellyseerr_api_key.expose_secret().to_string(),
+    let data: JellyseerrMediaResponse = client
+        .jellyseerr_get(
+            "request?take=50",
+            &config.jellyseerr_api_key,
+            &config.jellyseerr_url,
         )
-        .send()
-        .await
-        .map_err(|e| JellyseerrError::Request(e))?;
-
-    if !response.status().is_success() {
-        return Err(JellyseerrError::Other(format!(
-            "Failed to check media status: {}",
-            response.status()
-        ))
-        .into());
-    }
-
-    let text = response.text().await.map_err(JellyseerrError::Request)?;
-
-    let data: JellyseerrMediaResponse = serde_json::from_str(&text)
-        .map_err(|e| JellyseerrError::Other(format!("Failed to parse response: {}", e)))?;
+        .await?;
 
     let requested_media: std::collections::HashSet<(String, i32)> = data
         .results

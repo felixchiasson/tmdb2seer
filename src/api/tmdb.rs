@@ -1,6 +1,7 @@
+use crate::api::client::ApiClient;
 use crate::api::omdb;
 use crate::Result;
-use secrecy::{ExposeSecret, Secret};
+use secrecy::Secret;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use tracing::{debug, error};
@@ -70,24 +71,16 @@ pub async fn fetch_latest_releases(
     api_key: &Secret<String>,
     omdb_api_key: &Secret<String>,
 ) -> Result<Vec<Release>> {
-    let client = reqwest::Client::new();
+    let client = ApiClient::new();
     let mut all_releases = Vec::new();
 
     // Fetch movies
-    let movie_url = format!(
-        "https://api.themoviedb.org/3/discover/movie?api_key={}&language=en-US&sort_by=release_date.desc&with_watch_providers=8|9|337|1899|350|15|619|283&watch_region=US&vote_count.gte=1&vote_average.gte=1&page=1",
-        api_key.expose_secret()
-    );
-
-    let movie_response = client
-        .get(&movie_url)
-        .header("accept", "application/json")
-        .send()
-        .await
-        .map_err(TMDBError::Request)?;
-
-    let movie_text = movie_response.text().await.map_err(TMDBError::Request)?;
-    let movie_data: TMDBResponse = serde_json::from_str(&movie_text).map_err(TMDBError::Parse)?;
+    let movie_data: TMDBResponse = client
+            .tmdb_get(
+                "discover/movie?sort_by=release_date.desc&with_watch_providers=8|9|337|1899|350|15|619|283&watch_region=US&vote_count.gte=1&vote_average.gte=1&page=1",
+                api_key,
+            )
+            .await?;
 
     // Process movies
     for item in movie_data.results {
@@ -142,21 +135,12 @@ pub async fn fetch_latest_releases(
         });
     }
 
-    // Fetch TV shows
-    let tv_url = format!(
-        "https://api.themoviedb.org/3/discover/tv?api_key={}&language=en-US&sort_by=first_air_date.desc&with_watch_providers=8|9|337|1899|350|15|619|283&watch_region=US&with_watch_monetization_types=flatrate&vote_count.gte=1&vote_average.gte=1&page=1",
-        api_key.expose_secret()
-    );
-
-    let tv_response = client
-        .get(&tv_url)
-        .header("accept", "application/json")
-        .send()
-        .await
-        .map_err(TMDBError::Request)?;
-
-    let tv_text = tv_response.text().await.map_err(TMDBError::Request)?;
-    let tv_data: TMDBResponse = serde_json::from_str(&tv_text).map_err(TMDBError::Parse)?;
+    let tv_data: TMDBResponse = client
+            .tmdb_get(
+                "discover/tv?sort_by=first_air_date.desc&with_watch_providers=8|9|337|1899|350|15|619|283&watch_region=US&with_watch_monetization_types=flatrate&vote_count.gte=1&vote_average.gte=1&page=1",
+                api_key,
+            )
+            .await?;
 
     // Create futures for both TV details and providers
     let mut tv_futures = Vec::new();
@@ -224,27 +208,9 @@ pub async fn fetch_tv_details(api_key: &Secret<String>, tv_id: i32) -> Result<TV
     }
 
     debug!("Cache miss for TV show {}, fetching from API", tv_id);
-    let client = reqwest::Client::new();
-    let url = format!(
-        "https://api.themoviedb.org/3/tv/{}?api_key={}",
-        tv_id,
-        api_key.expose_secret()
-    );
 
-    debug!(
-        "Requesting TV details URL: {}",
-        url.replace(api_key.expose_secret(), "API_KEY")
-    );
-
-    let response = client
-        .get(&url)
-        .header("accept", "application/json")
-        .send()
-        .await
-        .map_err(TMDBError::Request)?;
-
-    let text = response.text().await.map_err(TMDBError::Request)?;
-    let details: TVShowDetails = serde_json::from_str(&text).map_err(TMDBError::Parse)?;
+    let client = ApiClient::new();
+    let details: TVShowDetails = client.tmdb_get(&format!("tv/{}", tv_id), api_key).await?;
 
     crate::api::cache::cache_tv_details(tv_id, details.clone());
 

@@ -2581,6 +2581,7 @@ dependencies = [
  "lightningcss",
  "minify-html",
  "minify-js",
+ "once_cell",
  "openssl",
  "rand",
  "reqwest",
