@@ -1,11 +1,13 @@
+use crate::security::csrf::validate_csrf_token;
+use crate::{Error, Result};
 use askama::Template;
 use axum::{
     extract::{Path, State},
-    response::{Html, IntoResponse},
+    response::{Html, IntoResponse, Response},
     Json,
 };
 use chrono::{DateTime, Utc};
-use http::{HeaderMap, Response, StatusCode};
+use http::{HeaderMap, StatusCode};
 use serde::Deserialize;
 use serde_json::json;
 use tracing::{error, info};
@@ -54,48 +56,11 @@ pub async fn add_to_jellyseerr(
     Path((media_type, id)): Path<(String, i32)>,
     Json(payload): Json<MediaRequest>,
 ) -> impl IntoResponse {
-    info!("Received request for {}/{}", media_type, id);
-
-    if let Some(token) = headers.get("X-CSRF-Token") {
-        if token.is_empty() {
-            error!("Empty CSRF token received");
-            return Response::builder()
-                .status(StatusCode::FORBIDDEN)
-                .body(axum::body::Body::from("Empty CSRF token"))
-                .unwrap();
-        }
-    } else {
-        error!("Missing CSRF token");
-        return Response::builder()
-            .status(StatusCode::FORBIDDEN)
-            .body(axum::body::Body::from("Missing CSRF token"))
-            .unwrap();
-    }
-
-    let seasons = if media_type == "tv" {
-        payload.seasons
-    } else {
-        None
-    };
-
-    match jellyseerr::request_media(&state.config, id, &media_type, seasons).await {
-        Ok(_) => {
-            info!(
-                "Successfully added media {}/{} to Jellyseerr",
-                media_type, id
-            );
-
-            let mut releases = state.releases.write().await;
-            releases.retain(|release| !(release.id == id && release.media_type == media_type));
-
-            Json(json!({
-                "success": true,
-                "message": "Media requested successfully"
-            }))
-            .into_response()
-        }
+    // Handle all potential errors and convert to IntoResponse
+    match process_media_request(headers, &state, &media_type, id, payload).await {
+        Ok(response) => response,
         Err(e) => {
-            error!("Error requesting media: {}", e);
+            error!("Error adding to Jellyseerr: {}", e);
             Json(json!({
                 "success": false,
                 "error": e.to_string()
@@ -105,56 +70,39 @@ pub async fn add_to_jellyseerr(
     }
 }
 
+async fn process_media_request(
+    headers: HeaderMap,
+    state: &AppState,
+    media_type: &str,
+    id: i32,
+    payload: MediaRequest,
+) -> Result<Response> {
+    validate_csrf_token(&headers)?;
+
+    let seasons = match media_type {
+        "tv" => payload.seasons,
+        "movie" => None,
+        _ => return Err(Error::Config(format!("Invalid media type: {}", media_type))),
+    };
+
+    jellyseerr::request_media(&state.config, id, media_type, seasons).await?;
+
+    let mut releases = state.releases.write().await;
+    releases.retain(|release| !(release.id == id && release.media_type == media_type));
+
+    Ok(Json(json!({
+        "success": true,
+        "message": format!("{} requested successfully",
+            if media_type == "tv" { "TV Show" } else { "Movie" })
+    }))
+    .into_response())
+}
+
 pub async fn refresh(headers: HeaderMap, State(state): State<AppState>) -> impl IntoResponse {
-    if let Some(token) = headers.get("X-CSRF-Token") {
-        if token.is_empty() {
-            error!("Empty CSRF token received");
-            return Response::builder()
-                .status(StatusCode::FORBIDDEN)
-                .body(axum::body::Body::from("Empty CSRF token"))
-                .unwrap();
-        }
-    } else {
-        error!("Missing CSRF token");
-        return Response::builder()
-            .status(StatusCode::FORBIDDEN)
-            .body(axum::body::Body::from("Missing CSRF token"))
-            .unwrap();
-    }
-
-    info!("Manual refresh triggered");
-    match tmdb::fetch_latest_releases(&state.config.tmdb_api_key, &state.config.omdb_api_key).await
-    {
-        Ok(new_releases) => {
-            match jellyseerr::filter_requested_media(&state.config, new_releases).await {
-                Ok(filtered_releases) => {
-                    let response = Json(json!({
-                        "success": true,
-                        "releases": &filtered_releases,
-                        "lastUpdate": Utc::now().to_rfc3339(),
-                    }))
-                    .into_response();
-
-                    let mut releases = state.releases.write().await;
-                    *releases = filtered_releases;
-                    let mut last_update = state.last_update.write().await;
-                    *last_update = Utc::now();
-
-                    info!("Manual refresh successful");
-                    response
-                }
-                Err(e) => {
-                    error!("Failed to filter requested media: {}", e);
-                    Json(json!({
-                        "success": false,
-                        "error": e.to_string()
-                    }))
-                    .into_response()
-                }
-            }
-        }
+    match update_release_list(headers, &state).await {
+        Ok(response) => response,
         Err(e) => {
-            error!("Failed to manually refresh releases: {}", e);
+            error!("Error refreshing: {}", e);
             Json(json!({
                 "success": false,
                 "error": e.to_string()
@@ -162,6 +110,31 @@ pub async fn refresh(headers: HeaderMap, State(state): State<AppState>) -> impl 
             .into_response()
         }
     }
+}
+
+async fn update_release_list(headers: HeaderMap, state: &AppState) -> Result<Response> {
+    validate_csrf_token(&headers)?;
+
+    info!("Manual refresh triggered");
+
+    let new_releases =
+        tmdb::fetch_latest_releases(&state.config.tmdb_api_key, &state.config.omdb_api_key).await?;
+
+    let filtered_releases = jellyseerr::filter_requested_media(&state.config, new_releases).await?;
+
+    let mut releases = state.releases.write().await;
+    *releases = filtered_releases.clone();
+    let mut last_update = state.last_update.write().await;
+    *last_update = Utc::now();
+
+    info!("Manual refresh successful");
+
+    Ok(Json(json!({
+        "success": true,
+        "releases": filtered_releases,
+        "lastUpdate": Utc::now().to_rfc3339(),
+    }))
+    .into_response())
 }
 
 pub async fn hide_media(
@@ -169,30 +142,35 @@ pub async fn hide_media(
     State(state): State<AppState>,
     Path((media_type, id)): Path<(String, i32)>,
 ) -> impl IntoResponse {
-    if let Some(token) = headers.get("X-CSRF-Token") {
-        if token.is_empty() {
-            error!("Empty CSRF token received");
-            return Response::builder()
-                .status(StatusCode::FORBIDDEN)
-                .body(axum::body::Body::from("Empty CSRF token"))
-                .unwrap();
+    match remove_media_from_view(headers, &state, &media_type, id).await {
+        Ok(response) => response,
+        Err(e) => {
+            error!("Error hiding media: {}", e);
+            Json(json!({
+                "success": false,
+                "error": e.to_string()
+            }))
+            .into_response()
         }
-    } else {
-        error!("Missing CSRF token");
-        return Response::builder()
-            .status(StatusCode::FORBIDDEN)
-            .body(axum::body::Body::from("Missing CSRF token"))
-            .unwrap();
     }
+}
+
+async fn remove_media_from_view(
+    headers: HeaderMap,
+    state: &AppState,
+    media_type: &str,
+    id: i32,
+) -> Result<Response> {
+    validate_csrf_token(&headers)?;
 
     let mut releases = state.releases.write().await;
     releases.retain(|release| !(release.id == id && release.media_type == media_type));
 
     info!("Hidden media {}/{} from view", media_type, id);
 
-    Json(json!({
+    Ok(Json(json!({
         "success": true,
         "message": "Media hidden successfully"
     }))
-    .into_response()
+    .into_response())
 }

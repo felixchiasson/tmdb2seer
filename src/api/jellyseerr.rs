@@ -1,5 +1,6 @@
 use crate::api::tmdb::Release;
 use crate::AppConfig;
+use crate::Result;
 use reqwest;
 use secrecy::ExposeSecret;
 use serde::Deserialize;
@@ -48,7 +49,7 @@ pub async fn request_media(
     tmdb_id: i32,
     media_type: &str,
     season: Option<Vec<i32>>,
-) -> Result<(), JellyseerrError> {
+) -> Result<()> {
     debug!("Requesting media: type={}, id={}", media_type, tmdb_id);
     let client = reqwest::Client::new();
 
@@ -67,10 +68,9 @@ pub async fn request_media(
             "seasons": season,
         }),
         _ => {
-            return Err(JellyseerrError::Other(format!(
-                "Invalid media type: {}",
-                media_type
-            )));
+            return Err(
+                JellyseerrError::Other(format!("Invalid media type: {}", media_type)).into(),
+            );
         }
     };
     debug!("Sending request to Jellyseerr: {:?}", body);
@@ -85,10 +85,7 @@ pub async fn request_media(
         .json(&body)
         .send()
         .await
-        .map_err(|e| {
-            error!("Jellyseerr request failed: {}", e);
-            JellyseerrError::Request(e)
-        })?;
+        .map_err(|e| JellyseerrError::Request(e))?;
 
     let status = response.status();
     if !status.is_success() {
@@ -100,10 +97,9 @@ pub async fn request_media(
             "Jellyseerr request failed: Status={}, Body={}",
             status, error_text
         );
-        return Err(JellyseerrError::Other(format!(
-            "Request failed: {} - {}",
-            status, error_text
-        )));
+        return Err(
+            JellyseerrError::Other(format!("Request failed: {} - {}", status, error_text)).into(),
+        );
     }
 
     info!(
@@ -117,7 +113,7 @@ pub async fn request_media(
 pub async fn filter_requested_media(
     config: &AppConfig,
     releases: Vec<Release>,
-) -> Result<Vec<Release>, JellyseerrError> {
+) -> Result<Vec<Release>> {
     let client = reqwest::Client::new();
 
     let url = format!("{}/api/v1/request?take=50", &config.jellyseerr_url);
@@ -131,13 +127,14 @@ pub async fn filter_requested_media(
         )
         .send()
         .await
-        .map_err(JellyseerrError::Request)?;
+        .map_err(|e| JellyseerrError::Request(e))?;
 
     if !response.status().is_success() {
         return Err(JellyseerrError::Other(format!(
             "Failed to check media status: {}",
             response.status()
-        )));
+        ))
+        .into());
     }
 
     let text = response.text().await.map_err(JellyseerrError::Request)?;

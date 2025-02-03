@@ -17,6 +17,9 @@ pub mod security {
     pub mod headers;
 }
 
+mod error;
+pub use error::{Error, Result};
+
 use crate::api::tmdb::Release;
 use crate::config::settings::Settings;
 use chrono::{DateTime, Utc};
@@ -24,7 +27,6 @@ use secrecy::Secret;
 use serde_json;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tower::util::MapResponseLayer;
 use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
 
@@ -41,36 +43,6 @@ pub struct AppConfig {
 pub struct RateLimitConfig {
     pub requests_per_second: u32,
     pub burst_size: u32,
-}
-
-#[derive(thiserror::Error, Debug)]
-pub enum AppError {
-    #[error("Configuration error: {0}")]
-    Config(String),
-
-    #[error("API error: {0}")]
-    Api(String),
-
-    #[error("Database error: {0}")]
-    Database(String),
-
-    #[error("Internal error: {0}")]
-    Internal(String),
-
-    #[error("IO error: {0}")]
-    Io(#[from] std::io::Error),
-}
-
-impl From<String> for AppError {
-    fn from(err: String) -> Self {
-        AppError::Internal(err)
-    }
-}
-
-impl From<&str> for AppError {
-    fn from(err: &str) -> Self {
-        AppError::Internal(err.to_string())
-    }
 }
 
 #[derive(Clone)]
@@ -90,13 +62,11 @@ impl AppState {
     }
 }
 
-pub type AppResult<T> = Result<T, AppError>;
-
-pub fn init_config() -> AppResult<AppConfig> {
+pub fn init_config() -> Result<AppConfig> {
     let settings = Settings::new()
-        .map_err(|e| AppError::Config(e.to_string()))?
+        .map_err(|e| Error::Config(e.to_string()))?
         .validate()
-        .map_err(AppError::Config)?;
+        .map_err(Error::Config)?;
 
     Ok(AppConfig {
         tmdb_api_key: settings.tmdb.api_key,

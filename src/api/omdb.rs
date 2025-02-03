@@ -1,3 +1,4 @@
+use crate::Result;
 use secrecy::{ExposeSecret, Secret};
 use serde::{Deserialize, Serialize};
 use tracing::debug;
@@ -27,6 +28,18 @@ pub enum OMDBError {
     Other(String),
 }
 
+impl std::fmt::Display for OMDBError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            OMDBError::Request(e) => write!(f, "Request error: {}", e),
+            OMDBError::Parse(e) => write!(f, "Parse error: {}", e),
+            OMDBError::Other(e) => write!(f, "{}", e),
+        }
+    }
+}
+
+impl std::error::Error for OMDBError {}
+
 impl OMDBResponse {
     fn clean_rating(rating: &Option<String>) -> Option<String> {
         rating.as_ref().and_then(|r| {
@@ -51,7 +64,7 @@ pub async fn fetch_ratings(
     api_key: &Secret<String>,
     title: &str,
     year: &str,
-) -> Result<OMDBResponse, OMDBError> {
+) -> Result<OMDBResponse> {
     // Check cache first
     if let Some(cached) = crate::api::cache::get_cached_omdb_rating(title, year) {
         debug!("Cache hit for OMDB: {} ({})", title, year);

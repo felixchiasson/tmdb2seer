@@ -1,10 +1,8 @@
 use crate::api::omdb;
-use dashmap::DashMap;
+use crate::Result;
 use secrecy::{ExposeSecret, Secret};
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use std::sync::OnceLock;
-use std::time::{Duration, Instant};
 use tracing::{debug, error};
 
 #[derive(Debug, Deserialize, Clone)]
@@ -71,7 +69,7 @@ pub struct Release {
 pub async fn fetch_latest_releases(
     api_key: &Secret<String>,
     omdb_api_key: &Secret<String>,
-) -> Result<Vec<Release>, TMDBError> {
+) -> Result<Vec<Release>> {
     let client = reqwest::Client::new();
     let mut all_releases = Vec::new();
 
@@ -219,10 +217,7 @@ pub async fn fetch_latest_releases(
     Ok(all_releases)
 }
 
-pub async fn fetch_tv_details(
-    api_key: &Secret<String>,
-    tv_id: i32,
-) -> Result<TVShowDetails, TMDBError> {
+pub async fn fetch_tv_details(api_key: &Secret<String>, tv_id: i32) -> Result<TVShowDetails> {
     if let Some(cached) = crate::api::cache::get_cached_tv_details(tv_id) {
         debug!("Cache hit for TV details: {}", tv_id);
         return Ok(cached);

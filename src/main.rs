@@ -1,17 +1,17 @@
 use std::time::Duration;
-use tmdb2seer::{api, init_config, init_router, AppResult, AppState};
+use tmdb2seer::{api, init_config, init_router, AppState, Result};
 use tracing::{debug, Level};
 use tracing::{error, info};
 
 #[tokio::main]
-async fn main() -> AppResult<()> {
+async fn main() -> Result<()> {
     let settings = tmdb2seer::config::settings::Settings::new()
         .map_err(|e| {
             error!("Failed to load settings: {}", e);
-            tmdb2seer::AppError::Config(e.to_string())
+            tmdb2seer::Error::Config(e.to_string())
         })?
         .validate()
-        .map_err(tmdb2seer::AppError::Config)?;
+        .map_err(tmdb2seer::Error::Config)?;
 
     let level = if settings.is_development() {
         Level::DEBUG
@@ -48,7 +48,7 @@ async fn main() -> AppResult<()> {
             .parse::<std::net::IpAddr>()
             .map_err(|e| {
                 error!("Failed to parse host address: {}", e);
-                tmdb2seer::AppError::Config(format!("Invalid host address: {}", e))
+                tmdb2seer::Error::Config(format!("Invalid host address: {}", e))
             })?,
         settings.server.port,
     ));
