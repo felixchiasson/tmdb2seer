@@ -17,6 +17,9 @@ pub mod security {
     pub mod deserialize;
     pub mod headers;
 }
+pub mod utils {
+    pub mod serde;
+}
 
 mod error;
 pub use config::settings::RetryConfig;
