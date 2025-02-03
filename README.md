@@ -20,6 +20,9 @@ port = 3000
 [rate_limit]
 requests_per_second = 10
 burst_size = 20
+
+[omdb]
+api_key = "your-omdb-api-key" # for ratings
 ```
 
 Then you can run the binary with `cargo run --release` or `cargo build --release && ./target/release/tmdb2seer`.
