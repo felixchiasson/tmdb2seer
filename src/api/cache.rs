@@ -1,10 +1,11 @@
 use crate::api::omdb::OMDBResponse;
 use crate::api::tmdb::TVShowDetails;
 use crate::utils::serde::timestamp;
+use crate::{Error, Result};
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::Path;
+use std::path::PathBuf;
 use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 use tracing::{debug, error};
@@ -130,7 +131,9 @@ impl CacheManager {
                 });
             }
         }
-        self.save_cache_to_disk();
+        if let Err(e) = self.save_cache_to_disk() {
+            error!("Failed to save cache to disk: {}", e);
+        }
     }
 
     fn load_cache_from_disk() -> Self {
@@ -162,14 +165,12 @@ impl CacheManager {
         manager
     }
 
-    fn save_cache_to_disk(&self) {
-        let cache_dir = Path::new("cache");
-        if !cache_dir.exists() {
-            if let Err(e) = fs::create_dir(cache_dir) {
-                error!("Failed to create cache directory: {}", e);
-                return;
-            }
-        }
+    fn save_cache_to_disk(&self) -> Result<()> {
+        const CACHE_DIR: &str = "cache";
+        const CACHE_FILE: &str = "cache.json";
+
+        let cache_path = PathBuf::from(CACHE_DIR);
+        fs::create_dir_all(&cache_path).map_err(|e| Error::Io(e))?;
 
         let cache_file = CacheFile {
             tv_details: self
@@ -184,18 +185,15 @@ impl CacheManager {
                 .collect(),
         };
 
-        match serde_json::to_string_pretty(&cache_file) {
-            Ok(json) => {
-                if let Err(e) = fs::write("cache/cache.json", json) {
-                    error!("Failed to write cache file: {}", e);
-                } else {
-                    debug!("Cache saved to disk successfully");
-                }
-            }
-            Err(e) => {
-                error!("Failed to serialize cache: {}", e);
-            }
-        }
+        let file_path = cache_path.join(CACHE_FILE);
+        let json =
+            serde_json::to_string_pretty(&cache_file).map_err(|e| Error::Serialization(e))?;
+
+        fs::write(&file_path, json).map_err(|e| Error::Io(e))?;
+
+        debug!("Cache saved to disk successfully at {:?}", file_path);
+
+        Ok(())
     }
 }
 
@@ -217,8 +215,9 @@ pub fn cache_omdb_rating(title: &str, year: &str, rating: OMDBResponse) {
     get_cache().insert_omdb_rating(key, rating);
 }
 
-pub fn save_cache() {
-    if let Some(cache) = CACHE.get() {
-        cache.save_cache_to_disk();
-    }
+pub fn save_cache() -> Result<()> {
+    CACHE
+        .get()
+        .ok_or_else(|| Error::Cache("Cache not initialized".to_string()))?
+        .save_cache_to_disk()
 }
