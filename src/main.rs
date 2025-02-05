@@ -64,9 +64,7 @@ async fn main() -> Result<()> {
     let save_cache = async {
         tokio::signal::ctrl_c().await.unwrap();
         debug!("Saving cache before exit...");
-        if let Err(e) = crate::api::cache::save_cache() {
-            error!("Failed to save cache: {}", e);
-        }
+        crate::api::cache::save_cache();
         std::process::exit(0);
     };
 
