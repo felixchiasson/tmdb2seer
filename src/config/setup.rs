@@ -1,5 +1,4 @@
 use crate::config::settings::Settings;
-use crate::Error;
 use crate::{api, AppState, Result};
 use axum::Router;
 use std::net::{IpAddr, SocketAddr};
@@ -50,21 +49,22 @@ pub fn get_socket_addr(settings: &Settings) -> Result<SocketAddr> {
 }
 
 pub async fn setup_server(app: Router, addr: SocketAddr) -> Result<()> {
-    let server = axum::serve(
-        tokio::net::TcpListener::bind(addr).await?,
-        app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
-    );
+    let save_cache = async {
+        tokio::signal::ctrl_c().await.unwrap();
+        debug!("Saving cache before exit...");
+        if let Err(e) = crate::api::cache::save_cache() {
+            error!("Failed to save cache: {}", e);
+        }
+        std::process::exit(0);
+    };
 
     tokio::select! {
-        _ = tokio::signal::ctrl_c() => {
-            debug!("Received shutdown signal");
-            if let Err(e) = crate::api::cache::save_cache().await {
-                error!("Failed to save cache: {}", e);
-            }
-            Ok(())
-        }
-        result = server => {
-            result.map_err(|e| Error::Config(format!("Server error: {}", e)))
-        }
+        _ = save_cache => {},
+        _ = axum::serve(
+            tokio::net::TcpListener::bind(addr).await?,
+            app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+        ) => {},
     }
+
+    Ok(())
 }

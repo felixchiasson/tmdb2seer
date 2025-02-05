@@ -1,24 +1,22 @@
-use dashmap::DashMap;
-use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::OnceLock;
-use std::time::{Duration, Instant};
-use tokio::sync::RwLock;
-use tracing::{debug, error};
-
 use crate::api::omdb::OMDBResponse;
 use crate::api::tmdb::TVShowDetails;
-use crate::Result;
+use crate::utils::serde::timestamp;
+use crate::{Error, Result};
+use dashmap::DashMap;
+use serde::{Deserialize, Serialize};
+use std::fs;
+use std::path::PathBuf;
+use std::sync::OnceLock;
+use std::time::{Duration, Instant};
+use tracing::{debug, error};
 
 const MAX_CACHE_SIZE: usize = 1000;
 const CACHE_TTL: Duration = Duration::from_secs(24 * 60 * 60);
-const SAVE_INTERVAL: Duration = Duration::from_secs(300); // 5 minutes
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CachedItem<T> {
     pub data: T,
-    #[serde(with = "crate::utils::serde::timestamp")]
+    #[serde(with = "timestamp")]
     pub timestamp: Instant,
 }
 
@@ -33,26 +31,19 @@ pub enum CacheType {
     OMDBRatings,
 }
 
-pub(crate) struct CacheManager {
+struct CacheManager {
     tv_details: DashMap<i32, CachedItem<TVShowDetails>>,
     omdb_ratings: DashMap<String, CachedItem<OMDBResponse>>,
-    last_save: RwLock<Instant>,
-    is_saving: AtomicBool,
 }
 
 static CACHE: OnceLock<CacheManager> = OnceLock::new();
 
-impl CacheManager {
-    fn new() -> Self {
-        Self {
-            tv_details: DashMap::new(),
-            omdb_ratings: DashMap::new(),
-            last_save: RwLock::new(Instant::now()),
-            is_saving: AtomicBool::new(false),
-        }
-    }
+fn get_cache() -> &'static CacheManager {
+    CACHE.get_or_init(|| CacheManager::load_cache_from_disk())
+}
 
-    fn get_tv_details(&self, id: i32) -> Option<CachedItem<TVShowDetails>> {
+impl CacheManager {
+    pub fn get_tv_details(&self, id: i32) -> Option<CachedItem<TVShowDetails>> {
         if let Some(item) = self.tv_details.get(&id) {
             if item.timestamp.elapsed() < CACHE_TTL {
                 return Some(item.clone());
@@ -62,7 +53,7 @@ impl CacheManager {
         None
     }
 
-    fn get_omdb_rating(&self, key: &str) -> Option<CachedItem<OMDBResponse>> {
+    pub fn get_omdb_rating(&self, key: &str) -> Option<CachedItem<OMDBResponse>> {
         if let Some(item) = self.omdb_ratings.get(key) {
             if item.timestamp.elapsed() < CACHE_TTL {
                 return Some(item.clone());
@@ -72,7 +63,7 @@ impl CacheManager {
         None
     }
 
-    fn insert_tv_details(&self, id: i32, details: TVShowDetails) {
+    pub fn insert_tv_details(&self, id: i32, details: TVShowDetails) {
         self.tv_details.insert(
             id,
             CachedItem {
@@ -83,7 +74,7 @@ impl CacheManager {
         self.cleanup(CacheType::TVDetails);
     }
 
-    fn insert_omdb_rating(&self, key: String, rating: OMDBResponse) {
+    pub fn insert_omdb_rating(&self, key: String, rating: OMDBResponse) {
         self.omdb_ratings.insert(
             key,
             CachedItem {
@@ -94,35 +85,13 @@ impl CacheManager {
         self.cleanup(CacheType::OMDBRatings);
     }
 
-    async fn should_save(&self) -> bool {
-        let last_save = *self.last_save.read().await;
-        last_save.elapsed() >= SAVE_INTERVAL && !self.is_saving.load(Ordering::SeqCst)
-    }
-
-    fn cleanup(&self, cache_type: CacheType) {
-        match cache_type {
-            CacheType::TVDetails => self.cleanup_map(&self.tv_details, "TV Details"),
-            CacheType::OMDBRatings => self.cleanup_map(&self.omdb_ratings, "OMDB Ratings"),
-        }
-
-        // Spawn a background task to handle saving if needed
-        tokio::spawn(async {
-            if let Some(cache) = CACHE.get() {
-                if cache.should_save().await {
-                    if let Err(e) = cache.save_cache_to_disk().await {
-                        error!("Failed to save cache to disk: {}", e);
-                    }
-                }
-            }
-        });
-    }
-
-    fn cleanup_map<K: Clone + std::hash::Hash + Eq, V: Clone>(
-        &self,
-        cache: &DashMap<K, CachedItem<V>>,
+    fn cleanup_cache<K: Clone + std::hash::Hash + Eq>(
+        cache: &DashMap<K, CachedItem<impl Clone>>,
         cache_name: &str,
+        remove_key: impl Fn(&K),
     ) {
         let current_size = cache.len();
+
         if current_size > MAX_CACHE_SIZE {
             debug!(
                 "{} cache size ({}) exceeded limit ({}), cleaning up...",
@@ -138,7 +107,7 @@ impl CacheManager {
 
             let entries_to_remove = current_size - (MAX_CACHE_SIZE * 3 / 4);
             for (key, _) in entries.iter().take(entries_to_remove) {
-                cache.remove(key);
+                remove_key(key);
             }
 
             debug!(
@@ -149,75 +118,83 @@ impl CacheManager {
         }
     }
 
-    async fn save_cache_to_disk(&self) -> Result<()> {
-        self.is_saving.store(true, Ordering::SeqCst);
-
-        let result = async {
-            let cache_file = CacheFile {
-                tv_details: self
-                    .tv_details
-                    .iter()
-                    .map(|r| (*r.key(), r.value().clone()))
-                    .collect(),
-                omdb_ratings: self
-                    .omdb_ratings
-                    .iter()
-                    .map(|r| (r.key().clone(), r.value().clone()))
-                    .collect(),
-            };
-
-            let cache_path = PathBuf::from("cache");
-            tokio::fs::create_dir_all(&cache_path).await?;
-
-            let temp_path = cache_path.join("cache.json.tmp");
-            let final_path = cache_path.join("cache.json");
-
-            let json = serde_json::to_string_pretty(&cache_file)?;
-            tokio::fs::write(&temp_path, &json).await?;
-            tokio::fs::rename(temp_path, final_path).await?;
-
-            // Update last_save time after successful save
-            *self.last_save.write().await = Instant::now();
-
-            Ok(())
+    fn cleanup(&self, cache_type: CacheType) {
+        match cache_type {
+            CacheType::TVDetails => {
+                Self::cleanup_cache(&self.tv_details, "TV Details", |key| {
+                    self.tv_details.remove(key);
+                });
+            }
+            CacheType::OMDBRatings => {
+                Self::cleanup_cache(&self.omdb_ratings, "OMDB Ratings", |key| {
+                    self.omdb_ratings.remove(key);
+                });
+            }
         }
-        .await;
-
-        self.is_saving.store(false, Ordering::SeqCst);
-        result
+        if let Err(e) = self.save_cache_to_disk() {
+            error!("Failed to save cache to disk: {}", e);
+        }
     }
 
-    async fn load_from_disk() -> Self {
-        let manager = Self::new();
+    fn load_cache_from_disk() -> Self {
+        let cache_path = "cache/cache.json";
+        let manager = CacheManager {
+            tv_details: DashMap::new(),
+            omdb_ratings: DashMap::new(),
+        };
 
-        if let Ok(cache_data) = tokio::fs::read_to_string("cache/cache.json").await {
-            if let Ok(cache_file) = serde_json::from_str::<CacheFile>(&cache_data) {
-                for (id, item) in cache_file.tv_details {
-                    if item.timestamp.elapsed() < CACHE_TTL {
-                        manager.tv_details.insert(id, item);
+        if let Ok(cache_data) = fs::read_to_string(cache_path) {
+            match serde_json::from_str::<CacheFile>(&cache_data) {
+                Ok(cache_file) => {
+                    for (id, item) in cache_file.tv_details {
+                        if item.timestamp.elapsed() < CACHE_TTL {
+                            manager.tv_details.insert(id, item);
+                        }
+                    }
+                    for (key, item) in cache_file.omdb_ratings {
+                        if item.timestamp.elapsed() < CACHE_TTL {
+                            manager.omdb_ratings.insert(key, item);
+                        }
                     }
                 }
-                for (key, item) in cache_file.omdb_ratings {
-                    if item.timestamp.elapsed() < CACHE_TTL {
-                        manager.omdb_ratings.insert(key, item);
-                    }
+                Err(e) => {
+                    error!("Error deserializing cache file: {}", e);
                 }
             }
         }
-
         manager
     }
-}
 
-// Public interface
-pub(crate) fn get_cache() -> &'static CacheManager {
-    CACHE.get_or_init(|| {
-        let runtime = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .unwrap();
-        runtime.block_on(CacheManager::load_from_disk())
-    })
+    fn save_cache_to_disk(&self) -> Result<()> {
+        const CACHE_DIR: &str = "cache";
+        const CACHE_FILE: &str = "cache.json";
+
+        let cache_path = PathBuf::from(CACHE_DIR);
+        fs::create_dir_all(&cache_path).map_err(|e| Error::Io(e))?;
+
+        let cache_file = CacheFile {
+            tv_details: self
+                .tv_details
+                .iter()
+                .map(|r| (*r.key(), r.value().clone()))
+                .collect(),
+            omdb_ratings: self
+                .omdb_ratings
+                .iter()
+                .map(|r| (r.key().clone(), r.value().clone()))
+                .collect(),
+        };
+
+        let file_path = cache_path.join(CACHE_FILE);
+        let json =
+            serde_json::to_string_pretty(&cache_file).map_err(|e| Error::Serialization(e))?;
+
+        fs::write(&file_path, json).map_err(|e| Error::Io(e))?;
+
+        debug!("Cache saved to disk successfully at {:?}", file_path);
+
+        Ok(())
+    }
 }
 
 pub fn get_cached_tv_details(id: i32) -> Option<TVShowDetails> {
@@ -238,6 +215,9 @@ pub fn cache_omdb_rating(title: &str, year: &str, rating: OMDBResponse) {
     get_cache().insert_omdb_rating(key, rating);
 }
 
-pub async fn save_cache() -> Result<()> {
-    get_cache().save_cache_to_disk().await
+pub fn save_cache() -> Result<()> {
+    CACHE
+        .get()
+        .ok_or_else(|| Error::Cache("Cache not initialized".to_string()))?
+        .save_cache_to_disk()
 }
