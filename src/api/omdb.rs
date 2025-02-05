@@ -66,7 +66,7 @@ pub async fn fetch_ratings(
     year: &str,
 ) -> Result<OMDBResponse> {
     // Check cache first
-    if let Some(cached) = crate::api::cache::get_cached_omdb_rating(title, year).await {
+    if let Some(cached) = crate::api::cache::get_cached_omdb_rating(title, year) {
         debug!("Cache hit for OMDB: {} ({})", title, year);
         return Ok(cached);
     }
@@ -88,7 +88,7 @@ pub async fn fetch_ratings(
         ratings: data.ratings,
     };
 
-    crate::api::cache::cache_omdb_rating(title, year, cleaned_data.clone()).await;
+    crate::api::cache::cache_omdb_rating(title, year, cleaned_data.clone());
 
     Ok(cleaned_data)
 }

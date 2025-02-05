@@ -2,9 +2,8 @@ use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::OnceLock;
 use std::time::{Duration, Instant};
-use tokio::sync::OnceCell;
 use tokio::sync::RwLock;
 use tracing::{debug, error};
 
@@ -41,7 +40,7 @@ pub(crate) struct CacheManager {
     is_saving: AtomicBool,
 }
 
-static CACHE: OnceCell<Arc<CacheManager>> = OnceCell::const_new();
+static CACHE: OnceLock<CacheManager> = OnceLock::new();
 
 impl CacheManager {
     fn new() -> Self {
@@ -211,33 +210,34 @@ impl CacheManager {
 }
 
 // Public interface
-pub(crate) async fn get_cache() -> &'static Arc<CacheManager> {
-    CACHE
-        .get_or_init(|| async { Arc::new(CacheManager::load_from_disk().await) })
-        .await
+pub(crate) fn get_cache() -> &'static CacheManager {
+    CACHE.get_or_init(|| {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(CacheManager::load_from_disk())
+    })
 }
 
-pub async fn get_cached_tv_details(id: i32) -> Option<TVShowDetails> {
-    get_cache().await.get_tv_details(id).map(|item| item.data)
+pub fn get_cached_tv_details(id: i32) -> Option<TVShowDetails> {
+    get_cache().get_tv_details(id).map(|item| item.data)
 }
 
-pub async fn get_cached_omdb_rating(title: &str, year: &str) -> Option<OMDBResponse> {
+pub fn get_cached_omdb_rating(title: &str, year: &str) -> Option<OMDBResponse> {
     let key = format!("{}_{}", title, year);
-    get_cache()
-        .await
-        .get_omdb_rating(&key)
-        .map(|item| item.data)
+    get_cache().get_omdb_rating(&key).map(|item| item.data)
 }
 
-pub async fn cache_tv_details(id: i32, details: TVShowDetails) {
-    get_cache().await.insert_tv_details(id, details);
+pub fn cache_tv_details(id: i32, details: TVShowDetails) {
+    get_cache().insert_tv_details(id, details);
 }
 
-pub async fn cache_omdb_rating(title: &str, year: &str, rating: OMDBResponse) {
+pub fn cache_omdb_rating(title: &str, year: &str, rating: OMDBResponse) {
     let key = format!("{}_{}", title, year);
-    get_cache().await.insert_omdb_rating(key, rating);
+    get_cache().insert_omdb_rating(key, rating);
 }
 
 pub async fn save_cache() -> Result<()> {
-    get_cache().await.save_cache_to_disk().await
+    get_cache().save_cache_to_disk().await
 }

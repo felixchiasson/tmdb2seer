@@ -199,7 +199,7 @@ pub async fn fetch_latest_releases(config: &AppConfig) -> Result<Vec<Release>> {
 }
 
 pub async fn fetch_tv_details(config: &AppConfig, tv_id: i32) -> Result<TVShowDetails> {
-    if let Some(cached) = crate::api::cache::get_cached_tv_details(tv_id).await {
+    if let Some(cached) = crate::api::cache::get_cached_tv_details(tv_id) {
         debug!("Cache hit for TV details: {}", tv_id);
         return Ok(cached);
     }
@@ -211,7 +211,7 @@ pub async fn fetch_tv_details(config: &AppConfig, tv_id: i32) -> Result<TVShowDe
         .tmdb_get(&format!("tv/{}", tv_id), &config.tmdb_api_key)
         .await?;
 
-    crate::api::cache::cache_tv_details(tv_id, details.clone()).await;
+    crate::api::cache::cache_tv_details(tv_id, details.clone());
 
     Ok(details)
 }
