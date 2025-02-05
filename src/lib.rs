@@ -11,7 +11,6 @@ pub mod api {
 }
 pub mod config {
     pub mod settings;
-    pub mod setup;
 }
 pub mod security {
     pub mod csrf;
