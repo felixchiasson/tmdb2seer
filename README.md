@@ -23,11 +23,6 @@ burst_size = 20
 
 [omdb]
 api_key = "your-omdb-api-key" # for ratings
-
-[retry]
-max_retries = 3
-initial_delay_ms = 500
-max_delay_ms = 5000
 ```
 
 Then you can run the binary with `cargo run --release` or `cargo build --release && ./target/release/tmdb2seer`.

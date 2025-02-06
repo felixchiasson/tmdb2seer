@@ -1,16 +1,20 @@
 use crate::api::omdb::OMDBResponse;
 use crate::api::tmdb::TVShowDetails;
 use crate::utils::serde::timestamp;
+use crate::Result;
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
-use std::fs;
-use std::path::Path;
-use std::sync::OnceLock;
-use std::time::{Duration, Instant};
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use tokio::sync::OnceCell;
+use tokio::time::timeout;
 use tracing::{debug, error};
 
 const MAX_CACHE_SIZE: usize = 1000;
 const CACHE_TTL: Duration = Duration::from_secs(24 * 60 * 60);
+const CLEANUP_INTERVAL: Duration = Duration::from_secs(3600); // 1 hour
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CachedItem<T> {
@@ -30,83 +34,116 @@ pub enum CacheType {
     OMDBRatings,
 }
 
-struct CacheManager {
-    tv_details: DashMap<i32, CachedItem<TVShowDetails>>,
-    omdb_ratings: DashMap<String, CachedItem<OMDBResponse>>,
+#[derive(Clone)]
+pub struct CacheManager {
+    tv_details: Arc<DashMap<i32, CachedItem<TVShowDetails>>>,
+    omdb_ratings: Arc<DashMap<String, CachedItem<OMDBResponse>>>,
+    last_cleanup: Arc<AtomicU64>,
 }
 
-static CACHE: OnceLock<CacheManager> = OnceLock::new();
-
-fn get_cache() -> &'static CacheManager {
-    CACHE.get_or_init(|| CacheManager::load_cache_from_disk())
-}
+static CACHE: OnceCell<Arc<CacheManager>> = OnceCell::const_new();
 
 impl CacheManager {
-    pub fn get_tv_details(&self, id: i32) -> Option<CachedItem<TVShowDetails>> {
+    fn new() -> Self {
+        Self {
+            tv_details: Arc::new(DashMap::with_capacity(MAX_CACHE_SIZE)),
+            omdb_ratings: Arc::new(DashMap::with_capacity(MAX_CACHE_SIZE)),
+            last_cleanup: Arc::new(AtomicU64::new(0)),
+        }
+    }
+
+    fn get_tv_details(&self, id: i32) -> Option<CachedItem<TVShowDetails>> {
         if let Some(item) = self.tv_details.get(&id) {
             if item.timestamp.elapsed() < CACHE_TTL {
                 return Some(item.clone());
             }
-            self.tv_details.remove(&id);
+
+            // Remove expired item without holding the reference
+            drop(item);
+            let id = id.clone();
+            let tv_details = self.tv_details.clone();
+            tokio::spawn(async move {
+                if let Err(_) = timeout(Duration::from_secs(1), async {
+                    tv_details.remove(&id);
+                })
+                .await
+                {
+                    debug!("Timeout while trying to remove expired TV details cache entry");
+                }
+            });
         }
         None
     }
 
-    pub fn get_omdb_rating(&self, key: &str) -> Option<CachedItem<OMDBResponse>> {
+    fn get_omdb_rating(&self, key: &str) -> Option<CachedItem<OMDBResponse>> {
         if let Some(item) = self.omdb_ratings.get(key) {
             if item.timestamp.elapsed() < CACHE_TTL {
                 return Some(item.clone());
             }
-            self.omdb_ratings.remove(key);
+
+            // Remove expired item without holding the reference
+            drop(item);
+            let key = key.to_string();
+            let omdb_ratings = self.omdb_ratings.clone();
+            tokio::spawn(async move {
+                if let Err(_) = timeout(Duration::from_secs(1), async {
+                    omdb_ratings.remove(&key);
+                })
+                .await
+                {
+                    debug!("Timeout while trying to remove expired OMDB cache entry");
+                }
+            });
         }
         None
     }
 
-    pub fn insert_tv_details(&self, id: i32, details: TVShowDetails) {
-        self.tv_details.insert(
-            id,
-            CachedItem {
-                data: details,
-                timestamp: Instant::now(),
-            },
-        );
-        self.cleanup(CacheType::TVDetails);
+    fn maybe_cleanup(&self) {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        let last = self.last_cleanup.load(Ordering::Relaxed);
+        if now - last > CLEANUP_INTERVAL.as_secs() {
+            if self
+                .last_cleanup
+                .compare_exchange(last, now, Ordering::SeqCst, Ordering::Relaxed)
+                .is_ok()
+            {
+                Self::cleanup_map(&self.tv_details, "TV Details");
+                Self::cleanup_map(&self.omdb_ratings, "OMDB Ratings");
+            }
+        }
     }
 
-    pub fn insert_omdb_rating(&self, key: String, rating: OMDBResponse) {
-        self.omdb_ratings.insert(
-            key,
-            CachedItem {
-                data: rating,
-                timestamp: Instant::now(),
-            },
-        );
-        self.cleanup(CacheType::OMDBRatings);
-    }
-
-    fn cleanup_cache<K: Clone + std::hash::Hash + Eq>(
-        cache: &DashMap<K, CachedItem<impl Clone>>,
-        cache_name: &str,
-        remove_key: impl Fn(&K),
+    fn cleanup_map<K: Clone + std::hash::Hash + Eq + Send + 'static, V: Clone + Send + 'static>(
+        cache: &DashMap<K, CachedItem<V>>,
+        cache_name: &'static str,
     ) {
         let current_size = cache.len();
-
         if current_size > MAX_CACHE_SIZE {
             debug!(
                 "{} cache size ({}) exceeded limit ({}), cleaning up...",
                 cache_name, current_size, MAX_CACHE_SIZE
             );
 
-            let mut entries: Vec<_> = cache
+            // Collect keys to remove
+            let keys_to_remove: Vec<_> = cache
                 .iter()
-                .map(|entry| (entry.key().clone(), entry.value().timestamp))
+                .filter_map(|entry| {
+                    if entry.value().timestamp.elapsed() > CACHE_TTL {
+                        Some(entry.key().clone())
+                    } else {
+                        None
+                    }
+                })
                 .collect();
 
-            entries.sort_by_key(|(_key, timestamp)| *timestamp);
-
-            let entries_to_remove = current_size - (MAX_CACHE_SIZE * 3 / 4);
-            for (key, _) in entries.iter().take(entries_to_remove) {
-                remove_key(key);
+            // Remove expired entries
+            for key in keys_to_remove {
+                cache.remove(&key);
+                debug!("Removed expired entry from {}", cache_name);
             }
 
             debug!(
@@ -117,60 +154,29 @@ impl CacheManager {
         }
     }
 
-    fn cleanup(&self, cache_type: CacheType) {
-        match cache_type {
-            CacheType::TVDetails => {
-                Self::cleanup_cache(&self.tv_details, "TV Details", |key| {
-                    self.tv_details.remove(key);
-                });
-            }
-            CacheType::OMDBRatings => {
-                Self::cleanup_cache(&self.omdb_ratings, "OMDB Ratings", |key| {
-                    self.omdb_ratings.remove(key);
-                });
-            }
-        }
-        self.save_cache_to_disk();
+    fn insert_tv_details(&self, id: i32, details: TVShowDetails) {
+        self.tv_details.insert(
+            id,
+            CachedItem {
+                data: details,
+                timestamp: Instant::now(),
+            },
+        );
+        self.maybe_cleanup();
     }
 
-    fn load_cache_from_disk() -> Self {
-        let cache_path = "cache/cache.json";
-        let manager = CacheManager {
-            tv_details: DashMap::new(),
-            omdb_ratings: DashMap::new(),
-        };
-
-        if let Ok(cache_data) = fs::read_to_string(cache_path) {
-            match serde_json::from_str::<CacheFile>(&cache_data) {
-                Ok(cache_file) => {
-                    for (id, item) in cache_file.tv_details {
-                        if item.timestamp.elapsed() < CACHE_TTL {
-                            manager.tv_details.insert(id, item);
-                        }
-                    }
-                    for (key, item) in cache_file.omdb_ratings {
-                        if item.timestamp.elapsed() < CACHE_TTL {
-                            manager.omdb_ratings.insert(key, item);
-                        }
-                    }
-                }
-                Err(e) => {
-                    error!("Error deserializing cache file: {}", e);
-                }
-            }
-        }
-        manager
+    fn insert_omdb_rating(&self, key: String, rating: OMDBResponse) {
+        self.omdb_ratings.insert(
+            key,
+            CachedItem {
+                data: rating,
+                timestamp: Instant::now(),
+            },
+        );
+        self.maybe_cleanup();
     }
 
-    fn save_cache_to_disk(&self) {
-        let cache_dir = Path::new("cache");
-        if !cache_dir.exists() {
-            if let Err(e) = fs::create_dir(cache_dir) {
-                error!("Failed to create cache directory: {}", e);
-                return;
-            }
-        }
-
+    async fn save_cache_to_disk(&self) -> Result<()> {
         let cache_file = CacheFile {
             tv_details: self
                 .tv_details
@@ -184,41 +190,75 @@ impl CacheManager {
                 .collect(),
         };
 
-        match serde_json::to_string_pretty(&cache_file) {
-            Ok(json) => {
-                if let Err(e) = fs::write("cache/cache.json", json) {
-                    error!("Failed to write cache file: {}", e);
-                } else {
-                    debug!("Cache saved to disk successfully");
+        let cache_path = PathBuf::from("cache");
+        tokio::fs::create_dir_all(&cache_path).await?;
+
+        let temp_path = cache_path.join("cache.json.tmp");
+        let final_path = cache_path.join("cache.json");
+
+        let json = serde_json::to_string_pretty(&cache_file)?;
+        tokio::fs::write(&temp_path, &json).await?;
+        tokio::fs::rename(temp_path, final_path).await?;
+
+        debug!("Cache saved to disk successfully");
+        Ok(())
+    }
+
+    async fn load_from_disk() -> Self {
+        let manager = Self::new();
+
+        if let Ok(cache_data) = tokio::fs::read_to_string("cache/cache.json").await {
+            match serde_json::from_str::<CacheFile>(&cache_data) {
+                Ok(cache_file) => {
+                    for (id, item) in cache_file.tv_details {
+                        if item.timestamp.elapsed() < CACHE_TTL {
+                            manager.tv_details.insert(id, item);
+                        }
+                    }
+                    for (key, item) in cache_file.omdb_ratings {
+                        if item.timestamp.elapsed() < CACHE_TTL {
+                            manager.omdb_ratings.insert(key, item);
+                        }
+                    }
+                    debug!("Cache loaded successfully");
+                }
+                Err(e) => {
+                    error!("Failed to parse cache file: {}", e);
                 }
             }
-            Err(e) => {
-                error!("Failed to serialize cache: {}", e);
-            }
         }
+
+        manager
     }
 }
 
-pub fn get_cached_tv_details(id: i32) -> Option<TVShowDetails> {
-    get_cache().get_tv_details(id).map(|item| item.data)
+pub async fn get_cache() -> &'static Arc<CacheManager> {
+    CACHE
+        .get_or_init(|| async { Arc::new(CacheManager::load_from_disk().await) })
+        .await
 }
 
-pub fn get_cached_omdb_rating(title: &str, year: &str) -> Option<OMDBResponse> {
+pub async fn get_cached_tv_details(id: i32) -> Option<TVShowDetails> {
+    get_cache().await.get_tv_details(id).map(|item| item.data)
+}
+
+pub async fn get_cached_omdb_rating(title: &str, year: &str) -> Option<OMDBResponse> {
     let key = format!("{}_{}", title, year);
-    get_cache().get_omdb_rating(&key).map(|item| item.data)
+    get_cache()
+        .await
+        .get_omdb_rating(&key)
+        .map(|item| item.data)
 }
 
-pub fn cache_tv_details(id: i32, details: TVShowDetails) {
-    get_cache().insert_tv_details(id, details);
+pub async fn cache_tv_details(id: i32, details: TVShowDetails) {
+    get_cache().await.insert_tv_details(id, details);
 }
 
-pub fn cache_omdb_rating(title: &str, year: &str, rating: OMDBResponse) {
+pub async fn cache_omdb_rating(title: &str, year: &str, rating: OMDBResponse) {
     let key = format!("{}_{}", title, year);
-    get_cache().insert_omdb_rating(key, rating);
+    get_cache().await.insert_omdb_rating(key, rating);
 }
 
-pub fn save_cache() {
-    if let Some(cache) = CACHE.get() {
-        cache.save_cache_to_disk();
-    }
+pub async fn save_cache() -> Result<()> {
+    get_cache().await.save_cache_to_disk().await
 }
